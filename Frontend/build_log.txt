@@ -1,0 +1,15 @@
+
+> codekeep@0.0.0 build
+> vite build
+
+[36mvite v7.2.6 [32mbuilding client environment for production...[36m[39m
+transforming...
+[32m✓[39m 35 modules transformed.
+[31m✗[39m Build failed in 1.02s
+[31merror during build:
+[31mCould not resolve "../../utils/codeHighlight" from "src/components/CodeKeep/ui/SharedRoomView.jsx"[31m
+file: [36mE:/javascript/codeKeep/Frontend/src/components/CodeKeep/ui/SharedRoomView.jsx[31m
+    at getRollupError (file:///E:/javascript/codeKeep/Frontend/node_modules/rollup/dist/es/shared/parseAst.js:401:41)
+    at error (file:///E:/javascript/codeKeep/Frontend/node_modules/rollup/dist/es/shared/parseAst.js:397:42)
+    at ModuleLoader.handleInvalidResolvedId (file:///E:/javascript/codeKeep/Frontend/node_modules/rollup/dist/es/shared/node-entry.js:21590:24)
+    at file:///E:/javascript/codeKeep/Frontend/node_modules/rollup/dist/es/shared/node-entry.js:21550:26[39m

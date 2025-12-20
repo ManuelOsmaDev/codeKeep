@@ -1,0 +1,403 @@
+import React, { useState, useEffect } from 'react';
+import { Plus } from 'lucide-react';
+
+// Components
+import Sidebar from './CodeKeep/ui/Sidebar';
+import Header from './CodeKeep/ui/Header';
+import SnippetCard from './CodeKeep/ui/SnippetCard';
+import DriveView from './CodeKeep/ui/DriveView';
+
+// Modals
+import NewSnippetModal from './CodeKeep/modals/NewSnippetModal';
+import EditSnippetModal from './CodeKeep/modals/EditSnippetModal';
+import ViewSnippetModal from './CodeKeep/modals/ViewSnippetModal';
+import UserProfileModal from './CodeKeep/modals/UserProfileModal';
+import SettingsModal from './CodeKeep/modals/SettingsModal';
+
+// Utils
+import { copyToClipboard } from './CodeKeep/utils/clipboard';
+
+// Constants
+import { languages } from './CodeKeep/constants/languages';
+
+const CodeKeep = () => {
+  // State
+  const [snippets, setSnippets] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedLanguage, setSelectedLanguage] = useState('all');
+  const [selectedTags, setSelectedTags] = useState([]);
+  const [showNewSnippet, setShowNewSnippet] = useState(false);
+  const [editingSnippet, setEditingSnippet] = useState(null);
+  const [favorites, setFavorites] = useState(new Set());
+  const [viewingSnippet, setViewingSnippet] = useState(null);
+  const [activeTab, setActiveTab] = useState('snippets');
+  const [languagesExpanded, setLanguagesExpanded] = useState(true);
+  const [tagsExpanded, setTagsExpanded] = useState(true);
+  const [driveExpanded, setDriveExpanded] = useState(true);
+  const [currentView, setCurrentView] = useState('all');
+  const [showUserProfile, setShowUserProfile] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [user, setUser] = useState(null);
+  const [bookmarks, setBookmarks] = useState(new Set());
+
+  // Form state
+  const [newSnippet, setNewSnippet] = useState({
+    title: '',
+    code: '',
+    language: 'javascript',
+    tags: []
+  });
+
+  // Load from localStorage
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const result = await localStorage.getItem('snippets');
+        if (result) {
+          setSnippets(JSON.parse(result.value));
+        } else {
+          // Add example snippets if none exist
+          const exampleSnippets = [
+            {
+              id: '1',
+              title: 'Date Formatter',
+              code: `const Date = Formatter(() => {
+  const dateFormat({
+    message: "Dati-of-07-01 20:00:15"
+    return 200;
+  });
+}`,
+              language: 'javascript',
+              tags: ['fechas', 'frontend'],
+              createdAt: new Date().toISOString()
+            },
+            {
+              id: '2',
+              title: 'NestJS Auth Guard',
+              code: `export class NestJS Guard {
+  private: AuthIExceptionDateRchen
+  auth:Ixsempity();
+  return auth;
+}`,
+              language: 'typescript',
+              tags: ['auth', 'frontend'],
+              createdAt: new Date().toISOString()
+            },
+            {
+              id: '3',
+              title: 'Angular Signal Example',
+              code: `import { Angul, Signal } from Angu
+
+export function(){2) {
+  console.logal($Signal1s #, prod
+  });
+}`,
+              language: 'typescript',
+              tags: ['frontend', 'frontend'],
+              createdAt: new Date().toISOString()
+            },
+            {
+              id: '4',
+              title: 'Angular Signal Example',
+              code: `export class Angular {
+  data.Signal( {
+    name: "Baha avw"
+  },
+  return python;
+}`,
+              language: 'javascript',
+              tags: ['fechas', 'frontend'],
+              createdAt: new Date().toISOString()
+            },
+            {
+              id: '5',
+              title: 'Date Maskers',
+              code: `class Python {
+  public function }{
+    consoleid("mmncuh");
+    System.m.out.println("lon database
+  }
+}`,
+              language: 'javascript',
+              tags: ['fechas', 'frontend'],
+              createdAt: new Date().toISOString()
+            },
+            {
+              id: '6',
+              title: 'Python Example',
+              code: `class Python {
+  public function ){
+    console.exceree("hello, world");
+    System.m.out.println("nnace_esivn
+  }
+}`,
+              language: 'python',
+              tags: ['frontend', 'frontend'],
+              createdAt: new Date().toISOString()
+            }
+          ];
+          setSnippets(exampleSnippets);
+          await localStorage.setItem('snippets', JSON.stringify(exampleSnippets));
+        }
+      } catch (error) {
+        console.log('No snippets found, starting fresh');
+      }
+
+      try {
+        const favResult = await localStorage.getItem('favorites');
+        if (favResult) {
+          setFavorites(new Set(JSON.parse(favResult.value)));
+        }
+      } catch (error) {
+        console.log('No favorites found');
+      }
+      setSnippets(updatedSnippets);
+    } catch (error) {
+      console.error('Error saving snippets:', error);
+    }
+  };
+
+  // Save favorites
+  const saveFavorites = async (updatedFavorites) => {
+    try {
+      await localStorage.setItem('favorites', JSON.stringify([...updatedFavorites]));
+      setFavorites(updatedFavorites);
+    } catch (error) {
+      console.error('Error saving favorites:', error);
+    }
+  };
+
+  // Save bookmarks
+  const saveBookmarks = async (updatedBookmarks) => {
+    try {
+      await localStorage.setItem('bookmarks', JSON.stringify([...updatedBookmarks]));
+      setBookmarks(updatedBookmarks);
+    } catch (error) {
+      console.error('Error saving bookmarks:', error);
+    }
+  };
+
+  // Save user
+  const saveUser = async (updatedUser) => {
+    try {
+      await localStorage.setItem('user', JSON.stringify(updatedUser));
+      setUser(updatedUser);
+    } catch (error) {
+      console.error('Error saving user:', error);
+    }
+  };
+
+  const allTags = [...new Set(snippets.flatMap(s => s.tags))];
+
+  const handleCreateSnippet = async () => {
+    if (!newSnippet.title || !newSnippet.code) return;
+
+    const snippet = {
+      id: Date.now().toString(),
+      ...newSnippet,
+      createdAt: new Date().toISOString()
+    };
+
+    await saveSnippets([...snippets, snippet]);
+    setNewSnippet({ title: '', code: '', language: 'javascript', tags: [] });
+    setShowNewSnippet(false);
+  };
+
+  const handleUpdateSnippet = async () => {
+    if (!editingSnippet) return;
+
+    const updated = snippets.map(s =>
+      s.id === editingSnippet.id ? editingSnippet : s
+    );
+
+    await saveSnippets(updated);
+    setEditingSnippet(null);
+  };
+
+  const handleDeleteSnippet = async (id) => {
+    const updated = snippets.filter(s => s.id !== id);
+    await saveSnippets(updated);
+  };
+
+  const toggleBookmark = async (id) => {
+    const updated = new Set(bookmarks);
+    if (updated.has(id)) {
+      updated.delete(id);
+    } else {
+      updated.add(id);
+    }
+    await saveBookmarks(updated);
+  };
+
+  const toggleFavorite = async (id) => {
+    const updated = new Set(favorites);
+    if (updated.has(id)) {
+      updated.delete(id);
+    } else {
+      updated.add(id);
+    }
+    await saveFavorites(updated);
+  };
+
+  const clearAllSnippets = async () => {
+    if (confirm('Are you sure you want to delete all snippets? This cannot be undone.')) {
+      await localStorage.setItem('snippets', JSON.stringify([]));
+      setSnippets([]);
+      setFavorites(new Set());
+      setBookmarks(new Set());
+      alert('All snippets deleted');
+    }
+  };
+
+  const filteredSnippets = snippets.filter(snippet => {
+    // Filter by view (all, favorites, bookmarks)
+    if (currentView === 'favorites' && !favorites.has(snippet.id)) return false;
+    if (currentView === 'bookmarks' && !bookmarks.has(snippet.id)) return false;
+
+    const matchesSearch = snippet.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      snippet.code.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesLanguage = selectedLanguage === 'all' || snippet.language === selectedLanguage;
+    const matchesTags = selectedTags.length === 0 ||
+      selectedTags.some(tag => snippet.tags.includes(tag));
+    return matchesSearch && matchesLanguage && matchesTags;
+  });
+
+  return (
+    <div className="flex h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
+      {/* Sidebar */}
+      <Sidebar
+        currentView={currentView}
+        setCurrentView={setCurrentView}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        selectedLanguage={selectedLanguage}
+        setSelectedLanguage={setSelectedLanguage}
+        selectedTags={selectedTags}
+        setSelectedTags={setSelectedTags}
+        favorites={favorites}
+        bookmarks={bookmarks}
+        allTags={allTags}
+        setShowUserProfile={setShowUserProfile}
+        setShowSettings={setShowSettings}
+        languages={languages}
+        languagesExpanded={languagesExpanded}
+        setLanguagesExpanded={setLanguagesExpanded}
+        tagsExpanded={tagsExpanded}
+        setTagsExpanded={setTagsExpanded}
+        driveExpanded={driveExpanded}
+        setDriveExpanded={setDriveExpanded}
+      />
+
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col">
+        {/* Header */}
+        <Header
+          searchTerm={searchTerm}
+          setSearchTerm={setSearchTerm}
+          setShowNewSnippet={setShowNewSnippet}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+        />
+
+        {/* Bento Grid / Drive View */}
+        <div className="flex-1 overflow-y-auto p-6 xl:px-8 2xl:px-12">
+          {activeTab === 'snippets' ? (
+            <>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-3xl font-bold">
+                  {currentView === 'all' && 'Bento Grid'}
+                  {currentView === 'favorites' && 'Favorites'}
+                  {currentView === 'bookmarks' && 'Bookmarks'}
+                </h2>
+                <div className="text-sm text-slate-400">
+                  {filteredSnippets.length} snippet{filteredSnippets.length !== 1 ? 's' : ''}
+                </div>
+              </div>
+
+              {filteredSnippets.length === 0 && (
+                <div className="text-center py-20">
+                  <p className="text-slate-400 text-lg mb-4">No snippets yet</p>
+                  <p className="text-slate-500 mb-6">Create your first code snippet to get started</p>
+                  <button
+                    onClick={() => setShowNewSnippet(true)}
+                    className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 px-6 py-3 rounded-lg font-semibold transition-colors"
+                  >
+                    <Plus className="w-5 h-5" />
+                    Create First Snippet
+                  </button>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 auto-rows-fr">
+                {filteredSnippets.map(snippet => (
+                  <SnippetCard
+                    key={snippet.id}
+                    snippet={snippet}
+                    favorites={favorites}
+                    bookmarks={bookmarks}
+                    toggleFavorite={toggleFavorite}
+                    toggleBookmark={toggleBookmark}
+                    copyToClipboard={copyToClipboard}
+                    setViewingSnippet={setViewingSnippet}
+                    handleDeleteSnippet={handleDeleteSnippet}
+                  />
+                ))}
+              </div>
+            </>
+          ) : (
+            <DriveView />
+          )}
+        </div>
+      </div>
+
+      {/* Modals */}
+      <NewSnippetModal
+        show={showNewSnippet}
+        onClose={() => {
+          setShowNewSnippet(false);
+          setNewSnippet({ title: '', code: '', language: 'javascript', tags: [] });
+        }}
+        newSnippet={newSnippet}
+        setNewSnippet={setNewSnippet}
+        handleCreate={handleCreateSnippet}
+      />
+
+      <EditSnippetModal
+        snippet={editingSnippet}
+        onClose={() => setEditingSnippet(null)}
+        setSnippet={setEditingSnippet}
+        handleUpdate={handleUpdateSnippet}
+      />
+
+      <ViewSnippetModal
+        snippet={viewingSnippet}
+        onClose={() => setViewingSnippet(null)}
+        favorites={favorites}
+        toggleFavorite={toggleFavorite}
+        copyToClipboard={copyToClipboard}
+        setEditingSnippet={setEditingSnippet}
+        handleDelete={handleDeleteSnippet}
+      />
+
+      <UserProfileModal
+        show={showUserProfile}
+        onClose={() => setShowUserProfile(false)}
+        user={user}
+        snippetsCount={snippets.length}
+        favoritesCount={favorites.size}
+        bookmarksCount={bookmarks.size}
+      />
+
+      <SettingsModal
+        show={showSettings}
+        onClose={() => setShowSettings(false)}
+        user={user}
+        setUser={setUser}
+        saveUser={saveUser}
+        clearAllSnippets={clearAllSnippets}
+      />
+    </div>
+  );
+};
+
+export default CodeKeep;
