@@ -310,15 +310,14 @@ const CodeKeep = () => {
                     {filteredSnippets.length} snippets found
                   </p>
                 </div>
-                {(user?.canManageSnippets || user?.isAdmin) && (
-                  <button
-                    onClick={() => setShowNewSnippet(true)}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm"
-                  >
-                    <Plus className="w-5 h-5" />
-                    New Snippet
-                  </button>
-                )}
+
+                <button
+                  onClick={() => setShowNewSnippet(true)}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm"
+                >
+                  <Plus className="w-5 h-5" />
+                  New Snippet
+                </button>
               </div>
 
               {loading ? (
@@ -328,15 +327,14 @@ const CodeKeep = () => {
               ) : filteredSnippets.length === 0 ? (
                 <div className="text-center py-12 bg-white dark:bg-slate-800/50 rounded-xl border border-dashed border-slate-300 dark:border-slate-700">
                   <p className="text-slate-500 dark:text-slate-400 mb-4">No snippets found</p>
-                  {(user?.canManageSnippets || user?.isAdmin) && (
-                    <button
-                      onClick={() => setShowNewSnippet(true)}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors"
-                    >
-                      <Plus className="w-5 h-5" />
-                      Create your first snippet
-                    </button>
-                  )}
+
+                  <button
+                    onClick={() => setShowNewSnippet(true)}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors"
+                  >
+                    <Plus className="w-5 h-5" />
+                    Create your first snippet
+                  </button>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

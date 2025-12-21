@@ -13,6 +13,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import scrumApi from '../../services/scrumModule';
+import PendingInvitations from './PendingInvitations';
+import { Users, ExternalLink } from 'lucide-react';
 
 const ScrumModule = () => {
     const navigate = useNavigate();
@@ -21,9 +23,11 @@ const ScrumModule = () => {
     const [showModal, setShowModal] = useState(false);
     const [editingApp, setEditingApp] = useState(null);
     const [formData, setFormData] = useState({ nombre: '', descripcion: '' });
+    const [sharedResources, setSharedResources] = useState({ sharedApps: [], sharedVersions: [], sharedProjects: [] });
 
     useEffect(() => {
         fetchApplications();
+        fetchSharedResources();
     }, []);
 
     const fetchApplications = async () => {
@@ -33,9 +37,25 @@ const ScrumModule = () => {
             setApplications(response.data);
         } catch (error) {
             console.error('Error fetching applications:', error);
-            toast.error('Failed to load applications');
+            toast.error('Error al cargar aplicaciones');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchSharedResources = async () => {
+        try {
+            const response = await scrumApi.getSharedResources();
+            setSharedResources(response.data);
+        } catch (error) {
+            console.error('Error fetching shared resources:', error);
+            // Fallback to old method
+            try {
+                const fallback = await scrumApi.getSharedProjects();
+                setSharedResources({ sharedApps: [], sharedVersions: [], sharedProjects: fallback.data || [] });
+            } catch (e) {
+                console.error('Fallback failed:', e);
+            }
         }
     };
 
@@ -44,29 +64,29 @@ const ScrumModule = () => {
         try {
             if (editingApp) {
                 await scrumApi.updateApplication(editingApp.id, formData);
-                toast.success('Application updated');
+                toast.success('Aplicación actualizada');
             } else {
                 await scrumApi.createApplication(formData);
-                toast.success('Application created');
+                toast.success('Aplicación creada');
             }
             setShowModal(false);
             setEditingApp(null);
             setFormData({ nombre: '', descripcion: '' });
             fetchApplications();
         } catch (error) {
-            toast.error('Failed to save application');
+            toast.error('Error al guardar aplicación');
         }
     };
 
     const handleDelete = async (id, e) => {
         e.stopPropagation();
-        if (!confirm('Are you sure you want to delete this application?')) return;
+        if (!confirm('¿Estás seguro de eliminar esta aplicación?')) return;
         try {
             await scrumApi.deleteApplication(id);
-            toast.success('Application deleted');
+            toast.success('Aplicación eliminada');
             fetchApplications();
         } catch (error) {
-            toast.error('Failed to delete application');
+            toast.error('Error al eliminar aplicación');
         }
     };
 
@@ -79,28 +99,29 @@ const ScrumModule = () => {
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-600 border-t-transparent"></div>
+            <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#f4f3f3' }}>
+                <div className="animate-spin rounded-full h-12 w-12 border-4 border-t-transparent" style={{ borderColor: '#ffcd00', borderTopColor: 'transparent' }}></div>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 pb-20">
+        <div className="min-h-screen pb-20" style={{ backgroundColor: '#f4f3f3' }}>
             {/* Header */}
-            <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-20">
+            <div style={{ backgroundColor: '#fff', borderBottom: '1px solid #eaebed' }} className="sticky top-0 z-20">
                 <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <button
                             onClick={() => navigate('/dashboard')}
-                            className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                            className="p-2 rounded-lg transition-colors hover:bg-gray-100"
+                            style={{ color: '#808099' }}
                         >
                             <ArrowLeft className="w-5 h-5" />
                         </button>
-                        <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg text-indigo-600 dark:text-indigo-400">
-                            <LayoutGrid className="w-6 h-6" />
+                        <div className="p-2 rounded-lg" style={{ backgroundColor: '#ffcd00' }}>
+                            <LayoutGrid className="w-6 h-6" style={{ color: '#2e3549' }} />
                         </div>
-                        <h1 className="text-xl font-bold">Scrum Manager</h1>
+                        <h1 className="text-xl font-bold" style={{ color: '#2e3549' }}>Scrum Manager</h1>
                     </div>
 
                     <button
@@ -109,30 +130,147 @@ const ScrumModule = () => {
                             setFormData({ nombre: '', descripcion: '' });
                             setShowModal(true);
                         }}
-                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors"
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors"
+                        style={{ backgroundColor: '#ffcd00', color: '#2e3549' }}
                     >
                         <Plus className="w-4 h-4" />
-                        New Application
+                        Nueva Aplicación
                     </button>
                 </div>
             </div>
 
             {/* Content */}
             <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                {/* Pending Invitations */}
+                <PendingInvitations onAccept={() => { fetchApplications(); fetchSharedResources(); }} />
+
+                {/* Shared Applications */}
+                {sharedResources.sharedApps?.length > 0 && (
+                    <div className="mb-8">
+                        <div className="flex items-center gap-2 mb-4">
+                            <Folder className="w-5 h-5" style={{ color: '#f59e0b' }} />
+                            <h2 className="text-lg font-semibold" style={{ color: '#2e3549' }}>
+                                Aplicaciones Compartidas
+                            </h2>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {sharedResources.sharedApps.map((app) => (
+                                <div
+                                    key={app.id}
+                                    onClick={() => navigate(`/scrum/app/${app.id}`)}
+                                    className="rounded-xl p-5 transition-all cursor-pointer hover:shadow-md group"
+                                    style={{ backgroundColor: '#fff', border: '1px solid #eaebed' }}
+                                >
+                                    <div className="flex items-start justify-between mb-3">
+                                        <div className="p-2 rounded-lg" style={{ backgroundColor: '#fef3c7' }}>
+                                            <Folder className="w-5 h-5" style={{ color: '#f59e0b' }} />
+                                        </div>
+                                        <span className="px-2 py-1 text-xs font-medium rounded-full" style={{ backgroundColor: '#f0fdf4', color: '#16a34a' }}>
+                                            {app.role}
+                                        </span>
+                                    </div>
+                                    <h3 className="font-semibold mb-1" style={{ color: '#2e3549' }}>
+                                        {app.nombre}
+                                    </h3>
+                                    <p className="text-sm" style={{ color: '#808099' }}>
+                                        Compartido por: {app.ownerName}
+                                    </p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Shared Versions */}
+                {sharedResources.sharedVersions?.length > 0 && (
+                    <div className="mb-8">
+                        <div className="flex items-center gap-2 mb-4">
+                            <GitBranch className="w-5 h-5" style={{ color: '#8b5cf6' }} />
+                            <h2 className="text-lg font-semibold" style={{ color: '#2e3549' }}>
+                                Versiones Compartidas
+                            </h2>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {sharedResources.sharedVersions.map((version) => (
+                                <div
+                                    key={version.id}
+                                    onClick={() => navigate(`/scrum/version/${version.id}`)}
+                                    className="rounded-xl p-5 transition-all cursor-pointer hover:shadow-md group"
+                                    style={{ backgroundColor: '#fff', border: '1px solid #eaebed' }}
+                                >
+                                    <div className="flex items-start justify-between mb-3">
+                                        <div className="p-2 rounded-lg" style={{ backgroundColor: '#ede9fe' }}>
+                                            <GitBranch className="w-5 h-5" style={{ color: '#8b5cf6' }} />
+                                        </div>
+                                        <span className="px-2 py-1 text-xs font-medium rounded-full" style={{ backgroundColor: '#f0fdf4', color: '#16a34a' }}>
+                                            {version.role}
+                                        </span>
+                                    </div>
+                                    <h3 className="font-semibold mb-1" style={{ color: '#2e3549' }}>
+                                        {version.nombre}
+                                    </h3>
+                                    <p className="text-sm" style={{ color: '#808099' }}>
+                                        Compartido por: {version.ownerName}
+                                    </p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Shared Projects */}
+                {sharedResources.sharedProjects?.length > 0 && (
+                    <div className="mb-8">
+                        <div className="flex items-center gap-2 mb-4">
+                            <Users className="w-5 h-5" style={{ color: '#808099' }} />
+                            <h2 className="text-lg font-semibold" style={{ color: '#2e3549' }}>
+                                Proyectos Compartidos
+                            </h2>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {sharedResources.sharedProjects.map((project) => (
+                                <div
+                                    key={project.id}
+                                    onClick={() => navigate(`/scrum/project/${project.id}`)}
+                                    className="rounded-xl p-5 transition-all cursor-pointer hover:shadow-md group"
+                                    style={{ backgroundColor: '#fff', border: '1px solid #eaebed' }}
+                                >
+                                    <div className="flex items-start justify-between mb-3">
+                                        <div className="p-2 rounded-lg" style={{ backgroundColor: '#e0f2fe' }}>
+                                            <ExternalLink className="w-5 h-5" style={{ color: '#0284c7' }} />
+                                        </div>
+                                        <span className="px-2 py-1 text-xs font-medium rounded-full" style={{ backgroundColor: '#f0fdf4', color: '#16a34a' }}>
+                                            {project.role}
+                                        </span>
+                                    </div>
+                                    <h3 className="font-semibold mb-1" style={{ color: '#2e3549' }}>
+                                        {project.nombre}
+                                    </h3>
+                                    <p className="text-sm" style={{ color: '#808099' }}>
+                                        Compartido por: {project.ownerName}
+                                    </p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+
                 {applications.length === 0 ? (
-                    <div className="text-center py-16 bg-white dark:bg-slate-800 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700">
-                        <Box className="w-16 h-16 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
-                        <h3 className="text-xl font-semibold text-slate-700 dark:text-slate-300">
-                            No applications yet
+                    <div className="text-center py-16 rounded-2xl" style={{ backgroundColor: '#fff', border: '2px dashed #eaebed' }}>
+                        <Box className="w-16 h-16 mx-auto mb-4" style={{ color: '#808099' }} />
+                        <h3 className="text-xl font-semibold" style={{ color: '#2e3549' }}>
+                            Sin aplicaciones aún
                         </h3>
-                        <p className="text-slate-500 dark:text-slate-400 mt-2">
-                            Create your first application to start managing projects
+                        <p className="mt-2" style={{ color: '#808099' }}>
+                            Crea tu primera aplicación para comenzar a gestionar proyectos
                         </p>
                         <button
                             onClick={() => setShowModal(true)}
-                            className="mt-4 text-indigo-600 dark:text-indigo-400 hover:underline font-medium"
+                            className="mt-4 font-medium hover:underline"
+                            style={{ color: '#ffcd00' }}
                         >
-                            Create application
+                            Crear aplicación
                         </button>
                     </div>
                 ) : (
@@ -141,43 +279,46 @@ const ScrumModule = () => {
                             <div
                                 key={app.id}
                                 onClick={() => navigate(`/scrum/app/${app.id}`)}
-                                className="bg-white dark:bg-slate-800 rounded-xl p-6 border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-lg transition-all cursor-pointer group"
+                                className="rounded-xl p-6 transition-all cursor-pointer group"
+                                style={{ backgroundColor: '#fff', border: '1px solid #eaebed' }}
                             >
                                 <div className="flex items-start justify-between mb-4">
-                                    <div className="p-3 bg-indigo-100 dark:bg-indigo-900/30 rounded-xl text-indigo-600 dark:text-indigo-400">
-                                        <Folder className="w-6 h-6" />
+                                    <div className="p-3 rounded-xl" style={{ backgroundColor: '#ffcd00' }}>
+                                        <Folder className="w-6 h-6" style={{ color: '#2e3549' }} />
                                     </div>
                                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                         <button
                                             onClick={(e) => handleEdit(app, e)}
-                                            className="p-2 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-colors"
+                                            className="p-2 rounded-lg transition-colors hover:bg-gray-100"
+                                            style={{ color: '#808099' }}
                                         >
                                             <Edit2 className="w-4 h-4" />
                                         </button>
                                         <button
                                             onClick={(e) => handleDelete(app.id, e)}
-                                            className="p-2 text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                            className="p-2 rounded-lg transition-colors hover:bg-red-50"
+                                            style={{ color: '#dc2626' }}
                                         >
                                             <Trash2 className="w-4 h-4" />
                                         </button>
                                     </div>
                                 </div>
 
-                                <h3 className="font-bold text-lg text-slate-900 dark:text-white mb-2">
+                                <h3 className="font-bold text-lg mb-2" style={{ color: '#2e3549' }}>
                                     {app.nombre}
                                 </h3>
                                 {app.descripcion && (
-                                    <p className="text-sm text-slate-500 dark:text-slate-400 mb-4 line-clamp-2">
+                                    <p className="text-sm mb-4 line-clamp-2" style={{ color: '#808099' }}>
                                         {app.descripcion}
                                     </p>
                                 )}
 
-                                <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-700">
-                                    <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+                                <div className="flex items-center justify-between pt-4" style={{ borderTop: '1px solid #eaebed' }}>
+                                    <div className="flex items-center gap-2 text-sm" style={{ color: '#808099' }}>
                                         <GitBranch className="w-4 h-4" />
-                                        <span>{app.versiones?.length || 0} versions</span>
+                                        <span>{app.versiones?.length || 0} versiones</span>
                                     </div>
-                                    <ChevronRight className="w-5 h-5 text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors" />
+                                    <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" style={{ color: '#808099' }} />
                                 </div>
                             </div>
                         ))}
@@ -188,36 +329,38 @@ const ScrumModule = () => {
             {/* Modal */}
             {showModal && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-md shadow-2xl">
-                        <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-6">
-                            {editingApp ? 'Edit Application' : 'New Application'}
+                    <div className="rounded-2xl p-6 w-full max-w-md" style={{ backgroundColor: '#fff' }}>
+                        <h2 className="text-xl font-bold mb-6" style={{ color: '#2e3549' }}>
+                            {editingApp ? 'Editar Aplicación' : 'Nueva Aplicación'}
                         </h2>
 
                         <form onSubmit={handleSubmit} className="space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                                    Name
+                                <label className="block text-sm font-medium mb-2" style={{ color: '#2e3549' }}>
+                                    Nombre
                                 </label>
                                 <input
                                     type="text"
                                     value={formData.nombre}
                                     onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-                                    className="w-full px-4 py-2 border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                    placeholder="Application name"
+                                    className="w-full px-4 py-2 rounded-lg focus:ring-2 focus:ring-amber-400 focus:outline-none"
+                                    style={{ backgroundColor: '#f4f3f3', border: '1px solid #eaebed', color: '#2e3549' }}
+                                    placeholder="Nombre de la aplicación"
                                     required
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                                    Description
+                                <label className="block text-sm font-medium mb-2" style={{ color: '#2e3549' }}>
+                                    Descripción
                                 </label>
                                 <textarea
                                     value={formData.descripcion}
                                     onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
-                                    className="w-full px-4 py-2 border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+                                    className="w-full px-4 py-2 rounded-lg focus:ring-2 focus:ring-amber-400 focus:outline-none resize-none"
+                                    style={{ backgroundColor: '#f4f3f3', border: '1px solid #eaebed', color: '#2e3549' }}
                                     rows={3}
-                                    placeholder="Optional description"
+                                    placeholder="Descripción opcional"
                                 />
                             </div>
 
@@ -228,15 +371,17 @@ const ScrumModule = () => {
                                         setShowModal(false);
                                         setEditingApp(null);
                                     }}
-                                    className="flex-1 px-4 py-2 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                                    className="flex-1 px-4 py-2 rounded-lg transition-colors"
+                                    style={{ border: '1px solid #eaebed', color: '#808099' }}
                                 >
-                                    Cancel
+                                    Cancelar
                                 </button>
                                 <button
                                     type="submit"
-                                    className="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors"
+                                    className="flex-1 px-4 py-2 rounded-lg font-medium transition-colors"
+                                    style={{ backgroundColor: '#ffcd00', color: '#2e3549' }}
                                 >
-                                    {editingApp ? 'Update' : 'Create'}
+                                    {editingApp ? 'Actualizar' : 'Crear'}
                                 </button>
                             </div>
                         </form>

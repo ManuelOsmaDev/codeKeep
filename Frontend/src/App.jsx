@@ -2,8 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import './App.css';
 import CodeKeep from './components/codeKeep';
 import GoogleCallback from './components/GoogleCallback';
-import AuthPage from './components/AuthPage';
-import LandingPage from './components/LandingPage';
+import LoginPage from './components/LoginPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import SharedRoomView from './components/CodeKeep/ui/SharedRoomView';
 import ScrumModule from './components/Scrum/ScrumModule';
@@ -16,8 +15,8 @@ function App() {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/login" element={<AuthPage />} />
+          <Route path="/" element={<LoginPage />} />
+          <Route path="/login" element={<LoginPage />} />
           <Route path="/auth/callback" element={<GoogleCallback />} />
           <Route path="/room/:token" element={<SharedRoomView />} />
           <Route

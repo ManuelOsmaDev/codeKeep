@@ -8,6 +8,9 @@ const scrumApi = {
     // ==================== USERS ====================
     getUsers: () => api.get('/scrum/users'),
 
+    // ==================== SHARED PROJECTS ====================
+    getSharedProjects: () => api.get('/scrum/projects/shared'),
+
     // ==================== APPLICATIONS ====================
     getApplications: () => api.get('/scrum/applications'),
     getApplication: (id) => api.get(`/scrum/applications/${id}`),
@@ -47,6 +50,23 @@ const scrumApi = {
     getComments: (activityId) => api.get(`/scrum/activities/${activityId}/comments`),
     createComment: (data) => api.post('/scrum/comments', data),
     deleteComment: (id) => api.delete(`/scrum/comments/${id}`),
+
+    // ==================== PROJECT MEMBERS & INVITATIONS ====================
+    getProjectMembers: (projectId) => api.get(`/scrum/projects/${projectId}/members`),
+    getProjectUsers: (projectId) => api.get(`/scrum/projects/${projectId}/users`),
+    inviteToProject: (projectId, data) => api.post(`/scrum/projects/${projectId}/invite`, data),
+    getPendingInvitations: () => api.get('/scrum/invitations/pending'),
+    acceptInvitation: (token) => api.post(`/scrum/invitations/${token}/accept`),
+    rejectInvitation: (token) => api.post(`/scrum/invitations/${token}/reject`),
+    removeMember: (projectId, userId) => api.delete(`/scrum/projects/${projectId}/members/${userId}`),
+    updateMemberRole: (projectId, userId, data) => api.patch(`/scrum/projects/${projectId}/members/${userId}`, data),
+
+    // ==================== UNIFIED MULTI-LEVEL SHARING ====================
+    sendInvitation: (data) => api.post('/scrum/invite', data),
+    getUnifiedPendingInvitations: () => api.get('/scrum/invitations/all'),
+    acceptUnifiedInvitation: (token) => api.post(`/scrum/invitations/unified/${token}/accept`),
+    rejectUnifiedInvitation: (token) => api.post(`/scrum/invitations/unified/${token}/reject`),
+    getSharedResources: () => api.get('/scrum/shared'),
 };
 
 export default scrumApi;

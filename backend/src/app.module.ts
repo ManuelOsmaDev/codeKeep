@@ -28,6 +28,10 @@ import { Activity } from './scrum/entities/activity.entity';
 import { SprintBacklog } from './scrum/entities/sprint-backlog.entity';
 import { SprintBacklogActivity } from './scrum/entities/sprint-backlog-activity.entity';
 import { Comment } from './scrum/entities/comment.entity';
+import { ProjectMember } from './scrum/entities/project-member.entity';
+import { ProjectInvitation } from './scrum/entities/project-invitation.entity';
+import { ScrumMember } from './scrum/entities/scrum-member.entity';
+import { ScrumInvitation } from './scrum/entities/scrum-invitation.entity';
 
 @Module({
   imports: [
@@ -60,6 +64,10 @@ import { Comment } from './scrum/entities/comment.entity';
           SprintBacklog,
           SprintBacklogActivity,
           Comment,
+          ProjectMember,
+          ProjectInvitation,
+          ScrumMember,
+          ScrumInvitation,
         ],
         synchronize: configService.get('NODE_ENV') === 'development',
       }),

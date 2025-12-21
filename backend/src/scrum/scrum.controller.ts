@@ -18,6 +18,7 @@ import { CreateActivityDto, UpdateActivityDto, MoveActivityDto } from './dto/act
 import { CreateSprintBacklogDto, UpdateSprintBacklogDto, AssignActivityToSprintDto } from './dto/sprint-backlog.dto';
 import { CreateCommentDto } from './dto/comment.dto';
 import { CreateTaskStateDto } from './dto/task-state.dto';
+import { InviteMemberDto, UpdateMemberRoleDto } from './dto/project-member.dto';
 
 @Controller('scrum')
 @UseGuards(AuthGuard('jwt'))
@@ -39,6 +40,12 @@ export class ScrumController {
   @Get('users')
   getUsers() {
     return this.scrumService.getUsers();
+  }
+
+  // ==================== SHARED PROJECTS ====================
+  @Get('projects/shared')
+  getSharedProjects(@Request() req) {
+    return this.scrumService.getSharedProjects(req.user.id);
   }
 
   // ==================== APPLICATIONS ====================
@@ -209,5 +216,100 @@ export class ScrumController {
   @Delete('comments/:id')
   deleteComment(@Param('id') id: string, @Request() req) {
     return this.scrumService.deleteComment(id, req.user.id);
+  }
+
+  // ==================== PROJECT MEMBERS & INVITATIONS ====================
+  
+  // Get project members
+  @Get('projects/:projectId/members')
+  getProjectMembers(@Param('projectId') projectId: string, @Request() req) {
+    return this.scrumService.getProjectMembers(projectId, req.user.id);
+  }
+
+  // Get users for task assignment (only project members)
+  @Get('projects/:projectId/users')
+  getProjectUsers(@Param('projectId') projectId: string, @Request() req) {
+    return this.scrumService.getProjectUsers(projectId, req.user.id);
+  }
+
+  // Invite user to project
+  @Post('projects/:projectId/invite')
+  inviteToProject(
+    @Param('projectId') projectId: string,
+    @Request() req,
+    @Body() dto: InviteMemberDto,
+  ) {
+    return this.scrumService.inviteToProject(req.user.id, projectId, dto);
+  }
+
+  // Get my pending invitations
+  @Get('invitations/pending')
+  getPendingInvitations(@Request() req) {
+    return this.scrumService.getPendingInvitations(req.user.id);
+  }
+
+  // Accept invitation
+  @Post('invitations/:token/accept')
+  acceptInvitation(@Param('token') token: string, @Request() req) {
+    return this.scrumService.acceptInvitation(req.user.id, token);
+  }
+
+  // Reject invitation
+  @Post('invitations/:token/reject')
+  rejectInvitation(@Param('token') token: string, @Request() req) {
+    return this.scrumService.rejectInvitation(req.user.id, token);
+  }
+
+  // Remove member from project
+  @Delete('projects/:projectId/members/:userId')
+  removeMember(
+    @Param('projectId') projectId: string,
+    @Param('userId') userId: string,
+    @Request() req,
+  ) {
+    return this.scrumService.removeMember(req.user.id, projectId, userId);
+  }
+
+  // Update member role
+  @Patch('projects/:projectId/members/:userId')
+  updateMemberRole(
+    @Param('projectId') projectId: string,
+    @Param('userId') userId: string,
+    @Request() req,
+    @Body() dto: UpdateMemberRoleDto,
+  ) {
+    return this.scrumService.updateMemberRole(req.user.id, projectId, userId, dto);
+  }
+
+  // ==================== UNIFIED MULTI-LEVEL INVITATIONS ====================
+
+  // Send invitation (works for app, version, or project)
+  @Post('invite')
+  sendInvitation(@Request() req, @Body() dto: InviteMemberDto) {
+    return this.scrumService.sendInvitation(req.user.id, dto);
+  }
+
+  // Get all pending invitations (unified)
+  @Get('invitations/all')
+  getUnifiedPendingInvitations(@Request() req) {
+    return this.scrumService.getUnifiedPendingInvitations(req.user.id);
+  }
+
+  // Accept unified invitation
+  @Post('invitations/unified/:token/accept')
+  acceptUnifiedInvitation(@Param('token') token: string, @Request() req) {
+    return this.scrumService.acceptUnifiedInvitation(req.user.id, token);
+  }
+
+  // Reject unified invitation
+  @Post('invitations/unified/:token/reject')
+  rejectUnifiedInvitation(@Param('token') token: string, @Request() req) {
+    return this.scrumService.rejectUnifiedInvitation(req.user.id, token);
+  }
+
+  // Get all shared resources (apps, versions, projects)
+  @Get('shared')
+  getSharedResources(@Request() req) {
+    return this.scrumService.getSharedResources(req.user.id);
   }
 }

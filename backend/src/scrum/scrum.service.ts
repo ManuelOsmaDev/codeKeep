@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Application } from './entities/application.entity';
@@ -9,6 +9,10 @@ import { Activity } from './entities/activity.entity';
 import { SprintBacklog } from './entities/sprint-backlog.entity';
 import { SprintBacklogActivity } from './entities/sprint-backlog-activity.entity';
 import { Comment } from './entities/comment.entity';
+import { ProjectMember } from './entities/project-member.entity';
+import { ProjectInvitation } from './entities/project-invitation.entity';
+import { ScrumMember } from './entities/scrum-member.entity';
+import { ScrumInvitation } from './entities/scrum-invitation.entity';
 import { User } from '../users/entities/user.entity';
 import { CreateApplicationDto, UpdateApplicationDto } from './dto/application.dto';
 import { CreateVersionDto, UpdateVersionDto } from './dto/version.dto';
@@ -17,6 +21,8 @@ import { CreateActivityDto, UpdateActivityDto, MoveActivityDto } from './dto/act
 import { CreateSprintBacklogDto, UpdateSprintBacklogDto, AssignActivityToSprintDto } from './dto/sprint-backlog.dto';
 import { CreateCommentDto } from './dto/comment.dto';
 import { CreateTaskStateDto } from './dto/task-state.dto';
+import { InviteMemberDto, UpdateMemberRoleDto } from './dto/project-member.dto';
+import { randomBytes } from 'crypto';
 
 const DEFAULT_STATES = [
   { nombre: 'Backlog', orden: 0, color: '#6366f1' },
@@ -46,6 +52,14 @@ export class ScrumService implements OnModuleInit {
     private commentRepository: Repository<Comment>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
+    @InjectRepository(ProjectMember)
+    private projectMemberRepository: Repository<ProjectMember>,
+    @InjectRepository(ProjectInvitation)
+    private projectInvitationRepository: Repository<ProjectInvitation>,
+    @InjectRepository(ScrumMember)
+    private scrumMemberRepository: Repository<ScrumMember>,
+    @InjectRepository(ScrumInvitation)
+    private scrumInvitationRepository: Repository<ScrumInvitation>,
   ) {}
 
   async onModuleInit() {
@@ -195,7 +209,17 @@ export class ScrumService implements OnModuleInit {
       throw new NotFoundException('Version not found');
     }
     const project = this.projectRepository.create(dto);
-    return this.projectRepository.save(project);
+    const savedProject = await this.projectRepository.save(project);
+
+    // Auto-add owner as project member
+    const ownerMember = this.projectMemberRepository.create({
+      userId,
+      projectId: savedProject.id,
+      role: 'owner',
+    });
+    await this.projectMemberRepository.save(ownerMember);
+
+    return savedProject;
   }
 
   async updateProject(id: string, userId: string, dto: UpdateProjectDto) {
@@ -224,13 +248,8 @@ export class ScrumService implements OnModuleInit {
 
   // ==================== ACTIVITIES ====================
   async getActivitiesByProject(projectId: string, userId: string) {
-    const project = await this.projectRepository.findOne({
-      where: { id: projectId },
-      relations: ['version', 'version.application'],
-    });
-    if (!project || project.version.application.userId !== userId) {
-      throw new NotFoundException('Project not found');
-    }
+    // Use verifyProjectAccess to allow both owners and members
+    const { project } = await this.verifyProjectAccess(projectId, userId);
 
     const activities = await this.activityRepository.find({
       where: { projectId },
@@ -254,13 +273,8 @@ export class ScrumService implements OnModuleInit {
   }
 
   async createActivity(userId: string, dto: CreateActivityDto) {
-    const project = await this.projectRepository.findOne({
-      where: { id: dto.projectId },
-      relations: ['version', 'version.application'],
-    });
-    if (!project || project.version.application.userId !== userId) {
-      throw new NotFoundException('Project not found');
-    }
+    // Use verifyProjectAccess to allow both owners and members
+    await this.verifyProjectAccess(dto.projectId, userId);
 
     // Obtener el máximo orden en el estado
     const maxOrder = await this.activityRepository
@@ -284,9 +298,10 @@ export class ScrumService implements OnModuleInit {
       where: { id },
       relations: ['project', 'project.version', 'project.version.application'],
     });
-    if (!activity || activity.project.version.application.userId !== userId) {
-      throw new NotFoundException('Activity not found');
-    }
+    if (!activity) throw new NotFoundException('Activity not found');
+    
+    // Verify user has access to this project
+    await this.verifyProjectAccess(activity.projectId, userId);
     Object.assign(activity, {
       ...dto,
       dueDate: dto.dueDate ? new Date(dto.dueDate) : activity.dueDate,
@@ -299,9 +314,10 @@ export class ScrumService implements OnModuleInit {
       where: { id },
       relations: ['project', 'project.version', 'project.version.application'],
     });
-    if (!activity || activity.project.version.application.userId !== userId) {
-      throw new NotFoundException('Activity not found');
-    }
+    if (!activity) throw new NotFoundException('Activity not found');
+    
+    // Verify user has access to this project
+    await this.verifyProjectAccess(activity.projectId, userId);
 
     const oldStateId = activity.stateId;
     const oldOrder = activity.orden;
@@ -362,9 +378,10 @@ export class ScrumService implements OnModuleInit {
       where: { id },
       relations: ['project', 'project.version', 'project.version.application'],
     });
-    if (!activity || activity.project.version.application.userId !== userId) {
-      throw new NotFoundException('Activity not found');
-    }
+    if (!activity) throw new NotFoundException('Activity not found');
+    
+    // Verify user has access to this project
+    await this.verifyProjectAccess(activity.projectId, userId);
 
     // Reordenar las demás actividades
     await this.activityRepository
@@ -382,13 +399,8 @@ export class ScrumService implements OnModuleInit {
 
   // ==================== SPRINT BACKLOGS ====================
   async getSprintBacklogs(projectId: string, userId: string) {
-    const project = await this.projectRepository.findOne({
-      where: { id: projectId },
-      relations: ['version', 'version.application'],
-    });
-    if (!project || project.version.application.userId !== userId) {
-      throw new NotFoundException('Project not found');
-    }
+    // Use verifyProjectAccess to allow both owners and members
+    await this.verifyProjectAccess(projectId, userId);
     return this.sprintBacklogRepository.find({
       where: { projectId },
       relations: ['state', 'sprintBacklogActivities', 'sprintBacklogActivities.activity'],
@@ -478,9 +490,10 @@ export class ScrumService implements OnModuleInit {
       where: { id: activityId },
       relations: ['project', 'project.version', 'project.version.application'],
     });
-    if (!activity || activity.project.version.application.userId !== userId) {
-      throw new NotFoundException('Activity not found');
-    }
+    if (!activity) throw new NotFoundException('Activity not found');
+    
+    // Verify user has access to this project
+    await this.verifyProjectAccess(activity.projectId, userId);
     return this.commentRepository.find({
       where: { activityId },
       relations: ['user'],
@@ -493,9 +506,10 @@ export class ScrumService implements OnModuleInit {
       where: { id: dto.activityId },
       relations: ['project', 'project.version', 'project.version.application'],
     });
-    if (!activity || activity.project.version.application.userId !== userId) {
-      throw new NotFoundException('Activity not found');
-    }
+    if (!activity) throw new NotFoundException('Activity not found');
+    
+    // Verify user has access to this project
+    await this.verifyProjectAccess(activity.projectId, userId);
     const comment = this.commentRepository.create({
       ...dto,
       userId,
@@ -510,5 +524,472 @@ export class ScrumService implements OnModuleInit {
     if (!comment) throw new NotFoundException('Comment not found');
     await this.commentRepository.remove(comment);
     return { message: 'Comment deleted successfully' };
+  }
+
+  // ==================== PROJECT MEMBERS & INVITATIONS ====================
+
+  // Helper to check if user has access (from project, version, or application level)
+  private async verifyProjectAccess(projectId: string, userId: string, requireOwner = false) {
+    const project = await this.projectRepository.findOne({
+      where: { id: projectId },
+      relations: ['version', 'version.application'],
+    });
+    if (!project) throw new NotFoundException('Project not found');
+
+    const isAppOwner = project.version.application.userId === userId;
+    
+    // Check direct project membership (old system)
+    const projectMember = await this.projectMemberRepository.findOne({
+      where: { projectId, userId },
+    });
+
+    // Check unified membership at project, version, or application level
+    const scrumMemberProject = await this.scrumMemberRepository.findOne({
+      where: { userId, resourceType: 'project', resourceId: projectId },
+    });
+    const scrumMemberVersion = await this.scrumMemberRepository.findOne({
+      where: { userId, resourceType: 'version', resourceId: project.versionId },
+    });
+    const scrumMemberApp = await this.scrumMemberRepository.findOne({
+      where: { userId, resourceType: 'application', resourceId: project.version.applicationId },
+    });
+
+    const hasMembership = projectMember || scrumMemberProject || scrumMemberVersion || scrumMemberApp;
+    const memberRole = projectMember?.role || scrumMemberProject?.role || scrumMemberVersion?.role || scrumMemberApp?.role;
+    
+    if (requireOwner) {
+      if (!isAppOwner && memberRole !== 'owner') {
+        throw new BadRequestException('Only project owner can perform this action');
+      }
+    } else {
+      if (!isAppOwner && !hasMembership) {
+        throw new BadRequestException('You are not a member of this project');
+      }
+    }
+
+    return { project, member: projectMember, isAppOwner, memberRole };
+  }
+
+  // Get project members
+  async getProjectMembers(projectId: string, userId: string) {
+    await this.verifyProjectAccess(projectId, userId);
+    
+    return this.projectMemberRepository.find({
+      where: { projectId },
+      relations: ['user'],
+      order: { joinedAt: 'ASC' },
+    });
+  }
+
+  // Get projects where user is a member (shared with me) - excludes projects user owns
+  async getSharedProjects(userId: string) {
+    const memberships = await this.projectMemberRepository.find({
+      where: { userId },
+      relations: ['project', 'project.version', 'project.version.application', 'project.version.application.user'],
+    });
+
+    // Filter out projects where user is the application owner
+    return memberships
+      .filter(m => m.project?.version?.application?.userId !== userId)
+      .map(m => ({
+        ...m.project,
+        role: m.role,
+        joinedAt: m.joinedAt,
+        ownerName: m.project?.version?.application?.user?.name || 'Unknown',
+      }));
+  }
+
+  // Get users available for task assignment (only project members)
+  async getProjectUsers(projectId: string, userId: string) {
+    await this.verifyProjectAccess(projectId, userId);
+
+    const members = await this.projectMemberRepository.find({
+      where: { projectId },
+      relations: ['user'],
+    });
+
+    return members.map(m => ({
+      id: m.user.id,
+      name: m.user.name,
+      email: m.user.email,
+      role: m.role,
+    }));
+  }
+
+  // Invite a user to project
+  async inviteToProject(userId: string, projectId: string, dto: InviteMemberDto) {
+    const { project } = await this.verifyProjectAccess(projectId, userId);
+
+    // Check if user is already a member
+    const existingMember = await this.projectMemberRepository.findOne({
+      where: { projectId },
+      relations: ['user'],
+    });
+    
+    const targetUser = await this.userRepository.findOne({ where: { email: dto.email } });
+    if (targetUser) {
+      const alreadyMember = await this.projectMemberRepository.findOne({
+        where: { projectId, userId: targetUser.id },
+      });
+      if (alreadyMember) {
+        throw new BadRequestException('User is already a member of this project');
+      }
+    }
+
+    // Check if there's already a pending invitation
+    const existingInvitation = await this.projectInvitationRepository.findOne({
+      where: { projectId, email: dto.email, status: 'pending' },
+    });
+    if (existingInvitation) {
+      throw new BadRequestException('An invitation is already pending for this email');
+    }
+
+    // Create invitation
+    const token = randomBytes(32).toString('hex');
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7); // 7 days expiration
+
+    const invitation = this.projectInvitationRepository.create({
+      email: dto.email.toLowerCase(),
+      projectId,
+      token,
+      invitedById: userId,
+      expiresAt,
+    });
+
+    await this.projectInvitationRepository.save(invitation);
+
+    return {
+      message: 'Invitation sent successfully',
+      email: dto.email,
+      expiresAt,
+    };
+  }
+
+  // Get pending invitations for current user
+  async getPendingInvitations(userId: string) {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+
+    const invitations = await this.projectInvitationRepository.find({
+      where: { email: user.email, status: 'pending' },
+      relations: ['project', 'project.version', 'project.version.application', 'invitedBy'],
+      order: { createdAt: 'DESC' },
+    });
+
+    // Filter out expired invitations
+    const now = new Date();
+    return invitations.filter(inv => new Date(inv.expiresAt) > now);
+  }
+
+  // Accept invitation
+  async acceptInvitation(userId: string, token: string) {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+
+    const invitation = await this.projectInvitationRepository.findOne({
+      where: { token, email: user.email, status: 'pending' },
+      relations: ['project'],
+    });
+
+    if (!invitation) {
+      throw new NotFoundException('Invitation not found or already processed');
+    }
+
+    if (new Date(invitation.expiresAt) < new Date()) {
+      invitation.status = 'expired';
+      await this.projectInvitationRepository.save(invitation);
+      throw new BadRequestException('Invitation has expired');
+    }
+
+    // Add user as project member
+    const member = this.projectMemberRepository.create({
+      userId,
+      projectId: invitation.projectId,
+      role: 'member',
+    });
+    await this.projectMemberRepository.save(member);
+
+    // Update invitation status
+    invitation.status = 'accepted';
+    await this.projectInvitationRepository.save(invitation);
+
+    return {
+      message: 'Invitation accepted successfully',
+      project: invitation.project,
+    };
+  }
+
+  // Reject invitation
+  async rejectInvitation(userId: string, token: string) {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+
+    const invitation = await this.projectInvitationRepository.findOne({
+      where: { token, email: user.email, status: 'pending' },
+    });
+
+    if (!invitation) {
+      throw new NotFoundException('Invitation not found or already processed');
+    }
+
+    invitation.status = 'rejected';
+    await this.projectInvitationRepository.save(invitation);
+
+    return { message: 'Invitation rejected' };
+  }
+
+  // Remove member from project
+  async removeMember(userId: string, projectId: string, targetUserId: string) {
+    const { member } = await this.verifyProjectAccess(projectId, userId);
+
+    // Only owner/admin can remove members
+    if (member?.role !== 'owner' && member?.role !== 'admin') {
+      throw new BadRequestException('Only project owner or admin can remove members');
+    }
+
+    const targetMember = await this.projectMemberRepository.findOne({
+      where: { projectId, userId: targetUserId },
+    });
+
+    if (!targetMember) {
+      throw new NotFoundException('Member not found');
+    }
+
+    if (targetMember.role === 'owner') {
+      throw new BadRequestException('Cannot remove project owner');
+    }
+
+    await this.projectMemberRepository.remove(targetMember);
+
+    return { message: 'Member removed successfully' };
+  }
+
+  // Update member role
+  async updateMemberRole(userId: string, projectId: string, targetUserId: string, dto: UpdateMemberRoleDto) {
+    await this.verifyProjectAccess(projectId, userId, true); // Only owner
+
+    const targetMember = await this.projectMemberRepository.findOne({
+      where: { projectId, userId: targetUserId },
+    });
+
+    if (!targetMember) {
+      throw new NotFoundException('Member not found');
+    }
+
+    if (targetMember.role === 'owner') {
+      throw new BadRequestException('Cannot change owner role');
+    }
+
+    targetMember.role = dto.role;
+    await this.projectMemberRepository.save(targetMember);
+
+    return { message: 'Role updated successfully' };
+  }
+
+  // ==================== UNIFIED MULTI-LEVEL INVITATIONS ====================
+
+  // Send invitation at any level (application, version, or project)
+  async sendInvitation(userId: string, dto: InviteMemberDto) {
+    const { resourceType, resourceId, email } = dto;
+
+    // Verify user has permission to invite
+    let resourceName = '';
+    if (resourceType === 'project') {
+      const { project } = await this.verifyProjectAccess(resourceId, userId);
+      resourceName = project.nombre;
+    } else if (resourceType === 'version') {
+      const version = await this.versionRepository.findOne({
+        where: { id: resourceId },
+        relations: ['application'],
+      });
+      if (!version || version.application.userId !== userId) {
+        throw new BadRequestException('Version not found or access denied');
+      }
+      resourceName = version.nombre;
+    } else if (resourceType === 'application') {
+      const app = await this.applicationRepository.findOne({
+        where: { id: resourceId },
+      });
+      if (!app || app.userId !== userId) {
+        throw new BadRequestException('Application not found or access denied');
+      }
+      resourceName = app.nombre;
+    }
+
+    // Check if already a member
+    const existingMember = await this.scrumMemberRepository.findOne({
+      where: { resourceType, resourceId, user: { email: email.toLowerCase() } },
+      relations: ['user'],
+    });
+    if (existingMember) {
+      throw new BadRequestException('User is already a member');
+    }
+
+    // Check for pending invitation
+    const existingInvitation = await this.scrumInvitationRepository.findOne({
+      where: { resourceType, resourceId, email: email.toLowerCase(), status: 'pending' },
+    });
+    if (existingInvitation) {
+      throw new BadRequestException('An invitation is already pending for this email');
+    }
+
+    // Create invitation
+    const token = randomBytes(32).toString('hex');
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7);
+
+    const invitation = this.scrumInvitationRepository.create({
+      email: email.toLowerCase(),
+      resourceType,
+      resourceId,
+      resourceName,
+      token,
+      invitedById: userId,
+      expiresAt,
+    });
+
+    await this.scrumInvitationRepository.save(invitation);
+
+    return { message: 'Invitation sent successfully', email, expiresAt, resourceType };
+  }
+
+  // Get pending invitations for current user (unified)
+  async getUnifiedPendingInvitations(userId: string) {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+
+    const invitations = await this.scrumInvitationRepository.find({
+      where: { email: user.email, status: 'pending' },
+      relations: ['invitedBy'],
+      order: { createdAt: 'DESC' },
+    });
+
+    // Filter out expired
+    const now = new Date();
+    return invitations.filter(inv => new Date(inv.expiresAt) > now);
+  }
+
+  // Accept unified invitation
+  async acceptUnifiedInvitation(userId: string, token: string) {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+
+    const invitation = await this.scrumInvitationRepository.findOne({
+      where: { token, email: user.email, status: 'pending' },
+    });
+
+    if (!invitation) {
+      throw new NotFoundException('Invitation not found or already processed');
+    }
+
+    if (new Date(invitation.expiresAt) < new Date()) {
+      invitation.status = 'expired';
+      await this.scrumInvitationRepository.save(invitation);
+      throw new BadRequestException('Invitation has expired');
+    }
+
+    // Add as member
+    const member = this.scrumMemberRepository.create({
+      userId,
+      resourceType: invitation.resourceType,
+      resourceId: invitation.resourceId,
+      role: 'member',
+    });
+    await this.scrumMemberRepository.save(member);
+
+    // Update invitation
+    invitation.status = 'accepted';
+    await this.scrumInvitationRepository.save(invitation);
+
+    return {
+      message: 'Invitation accepted successfully',
+      resourceType: invitation.resourceType,
+      resourceId: invitation.resourceId,
+      resourceName: invitation.resourceName,
+    };
+  }
+
+  // Reject unified invitation
+  async rejectUnifiedInvitation(userId: string, token: string) {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+
+    const invitation = await this.scrumInvitationRepository.findOne({
+      where: { token, email: user.email, status: 'pending' },
+    });
+
+    if (!invitation) {
+      throw new NotFoundException('Invitation not found or already processed');
+    }
+
+    invitation.status = 'rejected';
+    await this.scrumInvitationRepository.save(invitation);
+
+    return { message: 'Invitation rejected' };
+  }
+
+  // Get all shared resources (apps, versions, projects) for user
+  async getSharedResources(userId: string) {
+    // Get from new unified ScrumMember system
+    const memberships = await this.scrumMemberRepository.find({
+      where: { userId },
+      order: { joinedAt: 'DESC' },
+    });
+
+    const sharedApps = [];
+    const sharedVersions = [];
+    const sharedProjects = [];
+    const seenProjectIds = new Set<string>();
+
+    // Process new ScrumMember entries
+    for (const m of memberships) {
+      if (m.resourceType === 'application') {
+        const app = await this.applicationRepository.findOne({
+          where: { id: m.resourceId },
+          relations: ['user'],
+        });
+        if (app && app.userId !== userId) {
+          sharedApps.push({ ...app, role: m.role, joinedAt: m.joinedAt, ownerName: app.user?.name });
+        }
+      } else if (m.resourceType === 'version') {
+        const version = await this.versionRepository.findOne({
+          where: { id: m.resourceId },
+          relations: ['application', 'application.user'],
+        });
+        if (version && version.application.userId !== userId) {
+          sharedVersions.push({ ...version, role: m.role, joinedAt: m.joinedAt, ownerName: version.application.user?.name });
+        }
+      } else if (m.resourceType === 'project') {
+        const project = await this.projectRepository.findOne({
+          where: { id: m.resourceId },
+          relations: ['version', 'version.application', 'version.application.user'],
+        });
+        if (project && project.version.application.userId !== userId) {
+          sharedProjects.push({ ...project, role: m.role, joinedAt: m.joinedAt, ownerName: project.version.application.user?.name });
+          seenProjectIds.add(project.id);
+        }
+      }
+    }
+
+    // Also get from old ProjectMember system (for backwards compatibility)
+    const oldMemberships = await this.projectMemberRepository.find({
+      where: { userId },
+      relations: ['project', 'project.version', 'project.version.application', 'project.version.application.user'],
+    });
+
+    for (const m of oldMemberships) {
+      if (m.project && m.project.version?.application?.userId !== userId && !seenProjectIds.has(m.project.id)) {
+        sharedProjects.push({
+          ...m.project,
+          role: m.role,
+          joinedAt: m.joinedAt,
+          ownerName: m.project.version?.application?.user?.name || 'Unknown',
+        });
+        seenProjectIds.add(m.project.id);
+      }
+    }
+
+    return { sharedApps, sharedVersions, sharedProjects };
   }
 }

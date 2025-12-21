@@ -10,6 +10,10 @@ import { Activity } from './entities/activity.entity';
 import { SprintBacklog } from './entities/sprint-backlog.entity';
 import { SprintBacklogActivity } from './entities/sprint-backlog-activity.entity';
 import { Comment } from './entities/comment.entity';
+import { ProjectMember } from './entities/project-member.entity';
+import { ProjectInvitation } from './entities/project-invitation.entity';
+import { ScrumMember } from './entities/scrum-member.entity';
+import { ScrumInvitation } from './entities/scrum-invitation.entity';
 import { User } from '../users/entities/user.entity';
 
 @Module({
@@ -23,6 +27,10 @@ import { User } from '../users/entities/user.entity';
       SprintBacklog,
       SprintBacklogActivity,
       Comment,
+      ProjectMember,
+      ProjectInvitation,
+      ScrumMember,
+      ScrumInvitation,
       User,
     ]),
   ],
