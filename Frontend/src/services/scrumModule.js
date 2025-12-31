@@ -48,6 +48,7 @@ const scrumApi = {
 
     // ==================== COMMENTS ====================
     getComments: (activityId) => api.get(`/scrum/activities/${activityId}/comments`),
+    getSprintComments: (sprintId) => api.get(`/scrum/sprints/${sprintId}/comments`),
     createComment: (data) => api.post('/scrum/comments', data),
     deleteComment: (id) => api.delete(`/scrum/comments/${id}`),
 

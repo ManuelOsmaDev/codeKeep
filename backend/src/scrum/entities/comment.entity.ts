@@ -8,6 +8,7 @@ import {
 } from 'typeorm';
 import { Activity } from './activity.entity';
 import { User } from '../../users/entities/user.entity';
+import { SprintBacklog } from './sprint-backlog.entity';
 
 @Entity('scrum_comments')
 export class Comment {
@@ -17,12 +18,19 @@ export class Comment {
   @Column({ type: 'text' })
   comment: string;
 
-  @Column()
+  @Column({ nullable: true })
   activityId: string;
 
-  @ManyToOne(() => Activity, (activity) => activity.comments, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Activity, (activity) => activity.comments, { onDelete: 'CASCADE', nullable: true })
   @JoinColumn({ name: 'activityId' })
   activity: Activity;
+
+  @Column({ nullable: true })
+  sprintId: string;
+
+  @ManyToOne(() => SprintBacklog, (sprint) => sprint.comments, { onDelete: 'CASCADE', nullable: true })
+  @JoinColumn({ name: 'sprintId' })
+  sprint: SprintBacklog;
 
   @Column()
   userId: string;

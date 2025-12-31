@@ -23,7 +23,7 @@ import { InviteMemberDto, UpdateMemberRoleDto } from './dto/project-member.dto';
 @Controller('scrum')
 @UseGuards(AuthGuard('jwt'))
 export class ScrumController {
-  constructor(private readonly scrumService: ScrumService) {}
+  constructor(private readonly scrumService: ScrumService) { }
 
   // ==================== TASK STATES ====================
   @Get('states')
@@ -208,6 +208,11 @@ export class ScrumController {
     return this.scrumService.getComments(activityId, req.user.id);
   }
 
+  @Get('sprints/:sprintId/comments')
+  getSprintComments(@Param('sprintId') sprintId: string, @Request() req) {
+    return this.scrumService.getComments(sprintId, req.user.id);
+  }
+
   @Post('comments')
   createComment(@Request() req, @Body() dto: CreateCommentDto) {
     return this.scrumService.createComment(req.user.id, dto);
@@ -219,7 +224,7 @@ export class ScrumController {
   }
 
   // ==================== PROJECT MEMBERS & INVITATIONS ====================
-  
+
   // Get project members
   @Get('projects/:projectId/members')
   getProjectMembers(@Param('projectId') projectId: string, @Request() req) {

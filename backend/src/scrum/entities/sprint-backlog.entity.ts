@@ -9,6 +9,7 @@ import {
 import { Project } from './project.entity';
 import { TaskState } from './task-state.entity';
 import { SprintBacklogActivity } from './sprint-backlog-activity.entity';
+import { Comment } from './comment.entity';
 
 @Entity('scrum_sprint_backlogs')
 export class SprintBacklog {
@@ -40,4 +41,7 @@ export class SprintBacklog {
 
   @OneToMany(() => SprintBacklogActivity, (sba) => sba.sprintBacklog)
   sprintBacklogActivities: SprintBacklogActivity[];
+
+  @OneToMany(() => Comment, (comment) => comment.sprint)
+  comments: Comment[];
 }

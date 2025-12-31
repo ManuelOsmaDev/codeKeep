@@ -28,7 +28,8 @@ const DEFAULT_STATES = [
   { nombre: 'Backlog', orden: 0, color: '#6366f1' },
   { nombre: 'To Do', orden: 1, color: '#f59e0b' },
   { nombre: 'In Progress', orden: 2, color: '#3b82f6' },
-  { nombre: 'Done', orden: 3, color: '#22c55e' },
+  { nombre: 'Testing', orden: 3, color: '#a855f7' },
+  { nombre: 'Done', orden: 4, color: '#22c55e' },
 ];
 
 @Injectable()
@@ -60,15 +61,20 @@ export class ScrumService implements OnModuleInit {
     private scrumMemberRepository: Repository<ScrumMember>,
     @InjectRepository(ScrumInvitation)
     private scrumInvitationRepository: Repository<ScrumInvitation>,
-  ) {}
+  ) { }
 
   async onModuleInit() {
-    // Crear estados por defecto si no existen
-    const statesCount = await this.taskStateRepository.count();
-    if (statesCount === 0) {
-      for (const state of DEFAULT_STATES) {
+    // Ensure default states exist
+    for (const state of DEFAULT_STATES) {
+      const exists = await this.taskStateRepository.findOne({ where: { nombre: state.nombre } });
+      if (!exists) {
         const newState = this.taskStateRepository.create(state);
         await this.taskStateRepository.save(newState);
+      } else {
+        // Update order/color if changed
+        exists.orden = state.orden;
+        exists.color = state.color;
+        await this.taskStateRepository.save(exists);
       }
     }
   }
@@ -192,7 +198,16 @@ export class ScrumService implements OnModuleInit {
   async getProject(id: string, userId: string) {
     const project = await this.projectRepository.findOne({
       where: { id },
-      relations: ['version', 'version.application', 'sprintBacklogs', 'activities', 'activities.state', 'activities.user'],
+      relations: [
+        'version',
+        'version.application',
+        'sprintBacklogs',
+        'activities',
+        'activities.state',
+        'activities.user',
+        'activities.sprintBacklogActivities',
+        'activities.sprintBacklogActivities.sprintBacklog'
+      ],
     });
     if (!project || project.version.application.userId !== userId) {
       throw new NotFoundException('Project not found');
@@ -253,14 +268,14 @@ export class ScrumService implements OnModuleInit {
 
     const activities = await this.activityRepository.find({
       where: { projectId },
-      relations: ['state', 'user', 'comments'],
+      relations: ['state', 'user', 'comments', 'sprintBacklogActivities', 'sprintBacklogActivities.sprintBacklog'],
       order: { orden: 'ASC' },
     });
 
     // Organizar por estado
     const states = await this.taskStateRepository.find({ order: { orden: 'ASC' } });
     const activitiesByState: Record<string, typeof activities> = {};
-    
+
     for (const state of states) {
       activitiesByState[state.id] = activities.filter(a => a.stateId === state.id);
     }
@@ -284,9 +299,22 @@ export class ScrumService implements OnModuleInit {
       .select('MAX(activity.orden)', 'max')
       .getRawOne();
 
+    // Parse date in local timezone to avoid timezone conversion issues
+    let parsedDueDate = null;
+    if (dto.dueDate) {
+      // If date is in format YYYY-MM-DD, parse it as local date
+      const dateStr = dto.dueDate.toString();
+      if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        const [year, month, day] = dateStr.split('-').map(Number);
+        parsedDueDate = new Date(year, month - 1, day);
+      } else {
+        parsedDueDate = new Date(dto.dueDate);
+      }
+    }
+
     const activity = this.activityRepository.create({
       ...dto,
-      dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
+      dueDate: parsedDueDate,
       orden: (maxOrder?.max ?? -1) + 1,
     });
 
@@ -299,12 +327,28 @@ export class ScrumService implements OnModuleInit {
       relations: ['project', 'project.version', 'project.version.application'],
     });
     if (!activity) throw new NotFoundException('Activity not found');
-    
+
     // Verify user has access to this project
     await this.verifyProjectAccess(activity.projectId, userId);
+    // Parse date in local timezone to avoid timezone conversion issues
+    let parsedDueDate = activity.dueDate;
+    if (dto.dueDate !== undefined) {
+      if (dto.dueDate) {
+        const dateStr = dto.dueDate.toString();
+        if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          const [year, month, day] = dateStr.split('-').map(Number);
+          parsedDueDate = new Date(year, month - 1, day);
+        } else {
+          parsedDueDate = new Date(dto.dueDate);
+        }
+      } else {
+        parsedDueDate = null;
+      }
+    }
+
     Object.assign(activity, {
       ...dto,
-      dueDate: dto.dueDate ? new Date(dto.dueDate) : activity.dueDate,
+      dueDate: parsedDueDate,
     });
     return this.activityRepository.save(activity);
   }
@@ -315,7 +359,7 @@ export class ScrumService implements OnModuleInit {
       relations: ['project', 'project.version', 'project.version.application'],
     });
     if (!activity) throw new NotFoundException('Activity not found');
-    
+
     // Verify user has access to this project
     await this.verifyProjectAccess(activity.projectId, userId);
 
@@ -379,7 +423,7 @@ export class ScrumService implements OnModuleInit {
       relations: ['project', 'project.version', 'project.version.application'],
     });
     if (!activity) throw new NotFoundException('Activity not found');
-    
+
     // Verify user has access to this project
     await this.verifyProjectAccess(activity.projectId, userId);
 
@@ -403,7 +447,7 @@ export class ScrumService implements OnModuleInit {
     await this.verifyProjectAccess(projectId, userId);
     return this.sprintBacklogRepository.find({
       where: { projectId },
-      relations: ['state', 'sprintBacklogActivities', 'sprintBacklogActivities.activity'],
+      relations: ['state', 'sprintBacklogActivities', 'sprintBacklogActivities.activity', 'comments'],
     });
   }
 
@@ -415,12 +459,38 @@ export class ScrumService implements OnModuleInit {
     if (!project || project.version.application.userId !== userId) {
       throw new NotFoundException('Project not found');
     }
+
+    // Helper to ensure date is stored as Noon UTC to avoid timezone truncation issues
+    const toNoonUTC = (dateVal: string | Date | undefined) => {
+      if (!dateVal) return new Date();
+      // Get ISO string part YYYY-MM-DD
+      const s = dateVal instanceof Date ? dateVal.toISOString() : dateVal.toString();
+      const datePart = s.split('T')[0];
+      // Construct Noon UTC date
+      if (datePart.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        return new Date(`${datePart}T12:00:00Z`);
+      }
+      return new Date(dateVal);
+    };
+
     const sprint = this.sprintBacklogRepository.create({
       ...dto,
-      fechaInicio: new Date(dto.fechaInicio),
-      fechaFin: new Date(dto.fechaFin),
+      fechaInicio: toNoonUTC(dto.fechaInicio),
+      fechaFin: toNoonUTC(dto.fechaFin),
     });
-    return this.sprintBacklogRepository.save(sprint);
+    const savedSprint = await this.sprintBacklogRepository.save(sprint);
+
+    if (dto.activityIds && dto.activityIds.length > 0) {
+      const assignments = dto.activityIds.map((activityId) =>
+        this.sprintBacklogActivityRepository.create({
+          sprintBacklogId: savedSprint.id,
+          activityId,
+        }),
+      );
+      await this.sprintBacklogActivityRepository.save(assignments);
+    }
+
+    return savedSprint;
   }
 
   async updateSprintBacklog(id: string, userId: string, dto: UpdateSprintBacklogDto) {
@@ -431,12 +501,44 @@ export class ScrumService implements OnModuleInit {
     if (!sprint || sprint.project.version.application.userId !== userId) {
       throw new NotFoundException('Sprint backlog not found');
     }
+
+    // Helper to ensure date is stored as Noon UTC to avoid timezone truncation issues
+    const toNoonUTC = (dateVal: string | Date | undefined) => {
+      if (!dateVal) return undefined;
+      // Get ISO string part YYYY-MM-DD
+      const s = dateVal instanceof Date ? dateVal.toISOString() : dateVal.toString();
+      const datePart = s.split('T')[0];
+      // Construct Noon UTC date
+      if (datePart.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        return new Date(`${datePart}T12:00:00Z`);
+      }
+      return new Date(dateVal);
+    };
+
     Object.assign(sprint, {
       ...dto,
-      fechaInicio: dto.fechaInicio ? new Date(dto.fechaInicio) : sprint.fechaInicio,
-      fechaFin: dto.fechaFin ? new Date(dto.fechaFin) : sprint.fechaFin,
+      fechaInicio: dto.fechaInicio ? toNoonUTC(dto.fechaInicio) : sprint.fechaInicio,
+      fechaFin: dto.fechaFin ? toNoonUTC(dto.fechaFin) : sprint.fechaFin,
     });
-    return this.sprintBacklogRepository.save(sprint);
+    const savedSprint = await this.sprintBacklogRepository.save(sprint);
+
+    if (dto.activityIds) {
+      // Remove existing assignments
+      await this.sprintBacklogActivityRepository.delete({ sprintBacklogId: id });
+
+      // Add new assignments
+      if (dto.activityIds.length > 0) {
+        const assignments = dto.activityIds.map((activityId) =>
+          this.sprintBacklogActivityRepository.create({
+            sprintBacklogId: id,
+            activityId,
+          }),
+        );
+        await this.sprintBacklogActivityRepository.save(assignments);
+      }
+    }
+
+    return savedSprint;
   }
 
   async deleteSprintBacklog(id: string, userId: string) {
@@ -485,31 +587,55 @@ export class ScrumService implements OnModuleInit {
   }
 
   // ==================== COMMENTS ====================
-  async getComments(activityId: string, userId: string) {
+  async getComments(resourceId: string, userId: string) {
+    // Check if it's an activity
     const activity = await this.activityRepository.findOne({
-      where: { id: activityId },
-      relations: ['project', 'project.version', 'project.version.application'],
+      where: { id: resourceId },
     });
-    if (!activity) throw new NotFoundException('Activity not found');
-    
-    // Verify user has access to this project
-    await this.verifyProjectAccess(activity.projectId, userId);
-    return this.commentRepository.find({
-      where: { activityId },
-      relations: ['user'],
-      order: { createdAt: 'DESC' },
+
+    if (activity) {
+      await this.verifyProjectAccess(activity.projectId, userId);
+      return this.commentRepository.find({
+        where: { activityId: resourceId },
+        relations: ['user'],
+        order: { createdAt: 'DESC' },
+      });
+    }
+
+    // Check if it's a sprint
+    const sprint = await this.sprintBacklogRepository.findOne({
+      where: { id: resourceId },
     });
+
+    if (sprint) {
+      await this.verifyProjectAccess(sprint.projectId, userId);
+      return this.commentRepository.find({
+        where: { sprintId: resourceId },
+        relations: ['user'],
+        order: { createdAt: 'DESC' },
+      });
+    }
+
+    throw new NotFoundException('Resource not found');
   }
 
   async createComment(userId: string, dto: CreateCommentDto) {
-    const activity = await this.activityRepository.findOne({
-      where: { id: dto.activityId },
-      relations: ['project', 'project.version', 'project.version.application'],
-    });
-    if (!activity) throw new NotFoundException('Activity not found');
-    
-    // Verify user has access to this project
-    await this.verifyProjectAccess(activity.projectId, userId);
+    if (dto.activityId) {
+      const activity = await this.activityRepository.findOne({
+        where: { id: dto.activityId },
+      });
+      if (!activity) throw new NotFoundException('Activity not found');
+      await this.verifyProjectAccess(activity.projectId, userId);
+    } else if (dto.sprintId) {
+      const sprint = await this.sprintBacklogRepository.findOne({
+        where: { id: dto.sprintId },
+      });
+      if (!sprint) throw new NotFoundException('Sprint not found');
+      await this.verifyProjectAccess(sprint.projectId, userId);
+    } else {
+      throw new BadRequestException('Activity ID or Sprint ID is required');
+    }
+
     const comment = this.commentRepository.create({
       ...dto,
       userId,
@@ -537,7 +663,7 @@ export class ScrumService implements OnModuleInit {
     if (!project) throw new NotFoundException('Project not found');
 
     const isAppOwner = project.version.application.userId === userId;
-    
+
     // Check direct project membership (old system)
     const projectMember = await this.projectMemberRepository.findOne({
       where: { projectId, userId },
@@ -556,7 +682,7 @@ export class ScrumService implements OnModuleInit {
 
     const hasMembership = projectMember || scrumMemberProject || scrumMemberVersion || scrumMemberApp;
     const memberRole = projectMember?.role || scrumMemberProject?.role || scrumMemberVersion?.role || scrumMemberApp?.role;
-    
+
     if (requireOwner) {
       if (!isAppOwner && memberRole !== 'owner') {
         throw new BadRequestException('Only project owner can perform this action');
@@ -573,7 +699,7 @@ export class ScrumService implements OnModuleInit {
   // Get project members
   async getProjectMembers(projectId: string, userId: string) {
     await this.verifyProjectAccess(projectId, userId);
-    
+
     return this.projectMemberRepository.find({
       where: { projectId },
       relations: ['user'],
@@ -625,7 +751,7 @@ export class ScrumService implements OnModuleInit {
       where: { projectId },
       relations: ['user'],
     });
-    
+
     const targetUser = await this.userRepository.findOne({ where: { email: dto.email } });
     if (targetUser) {
       const alreadyMember = await this.projectMemberRepository.findOne({

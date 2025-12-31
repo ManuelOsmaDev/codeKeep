@@ -1,9 +1,14 @@
-import { IsString, IsUUID } from 'class-validator';
+import { IsString, IsUUID, IsOptional } from 'class-validator';
 
 export class CreateCommentDto {
   @IsString()
   comment: string;
 
   @IsUUID()
-  activityId: string;
+  @IsOptional()
+  activityId?: string;
+
+  @IsUUID()
+  @IsOptional()
+  sprintId?: string;
 }

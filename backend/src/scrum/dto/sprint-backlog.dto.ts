@@ -15,6 +15,10 @@ export class CreateSprintBacklogDto {
 
   @IsUUID()
   stateId: string;
+
+  @IsOptional()
+  @IsUUID('4', { each: true })
+  activityIds?: string[];
 }
 
 export class UpdateSprintBacklogDto {
@@ -33,6 +37,10 @@ export class UpdateSprintBacklogDto {
   @IsOptional()
   @IsUUID()
   stateId?: string;
+
+  @IsOptional()
+  @IsUUID('4', { each: true })
+  activityIds?: string[];
 }
 
 export class AssignActivityToSprintDto {

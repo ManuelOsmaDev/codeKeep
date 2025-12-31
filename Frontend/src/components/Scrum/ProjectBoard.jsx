@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { DndContext, DragOverlay, closestCorners } from '@dnd-kit/core';
 import { useDroppable, useDraggable } from '@dnd-kit/core';
@@ -19,6 +19,7 @@ import {
     Target,
     Users,
     UserPlus,
+    Search,
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import scrumApi from '../../services/scrumModule';
@@ -45,6 +46,8 @@ const ActivityCard = ({ activity, onEdit, onDelete, onOpenComments }) => {
         high: 'bg-red-100 text-red-700',
     };
 
+    const sprint = activity.sprintBacklogActivities?.[0]?.sprintBacklog;
+
     return (
         <div
             ref={setNodeRef}
@@ -59,6 +62,24 @@ const ActivityCard = ({ activity, onEdit, onDelete, onOpenComments }) => {
                     {activity.priority}
                 </span>
                 <div className="flex items-center gap-1">
+                    {sprint && (
+                        <div className="relative group/tooltip">
+                            <div
+                                className="p-1.5 rounded-lg flex items-center justify-center cursor-pointer"
+                                style={{ color: '#a855f7' }}
+                            >
+                                <Target className="w-4 h-4" />
+                            </div>
+                            {/* Custom Tooltip */}
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block z-[100] whitespace-nowrap">
+                                <div className="bg-slate-900 text-white text-[11px] py-1 px-2.5 rounded-md shadow-xl font-medium relative">
+                                    {sprint.nombre}
+                                    {/* Arrow */}
+                                    <div className="absolute top-full left-1/2 -translate-x-1/2 border-[5px] border-transparent border-t-slate-900"></div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                     <button
                         onClick={() => onOpenComments(activity)}
                         className="p-1.5 rounded-lg transition-colors hover:bg-gray-100"
@@ -109,16 +130,18 @@ const ActivityCard = ({ activity, onEdit, onDelete, onOpenComments }) => {
                         {activity.dueDate && (
                             <span className="flex items-center gap-1">
                                 <Calendar className="w-3 h-3" />
-                                {new Date(activity.dueDate).toLocaleDateString()}
+                                {activity.dueDate.replace(/-/g, '/')}
                             </span>
                         )}
                     </div>
-                    {(activity.comments?.length || 0) > 0 && (
-                        <span className="flex items-center gap-1" style={{ color: '#3b82f6' }}>
-                            <MessageSquare className="w-3 h-3" />
-                            {activity.comments?.length}
-                        </span>
-                    )}
+                    <div className="flex items-center gap-2">
+                        {(activity.comments?.length || 0) > 0 && (
+                            <span className="flex items-center gap-1" style={{ color: '#3b82f6' }}>
+                                <MessageSquare className="w-3 h-3" />
+                                {activity.comments?.length}
+                            </span>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>
@@ -135,7 +158,7 @@ const DroppableColumn = ({ state, activities, onAddActivity, onEditActivity, onD
     return (
         <div
             ref={setNodeRef}
-            className={`flex-1 min-w-[280px] max-w-[320px] flex flex-col bg-slate-100/80 dark:bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-200 dark:border-slate-700 transition-all ${isOver ? 'ring-2 ring-indigo-500 bg-indigo-50/50 dark:bg-indigo-900/20' : ''
+            className={`flex-shrink-0 w-[280px] flex flex-col bg-slate-100/80 dark:bg-slate-800/50 backdrop-blur-sm rounded-xl border border-slate-200 dark:border-slate-700 transition-all ${isOver ? 'ring-2 ring-indigo-500 bg-indigo-50/50 dark:bg-indigo-900/20' : ''
                 }`}
         >
             <div className="p-4 border-b border-slate-200 dark:border-slate-700">
@@ -182,7 +205,7 @@ const DroppableColumn = ({ state, activities, onAddActivity, onEditActivity, onD
 };
 
 // Comments Modal
-const CommentsModal = ({ activity, onClose, onRefresh }) => {
+const CommentsModal = ({ resource, type = 'activity', onClose, onRefresh }) => {
     const [comments, setComments] = useState([]);
     const [loading, setLoading] = useState(true);
     const [newComment, setNewComment] = useState('');
@@ -190,11 +213,13 @@ const CommentsModal = ({ activity, onClose, onRefresh }) => {
 
     useEffect(() => {
         fetchComments();
-    }, [activity.id]);
+    }, [resource.id]);
 
     const fetchComments = async () => {
         try {
-            const response = await scrumApi.getComments(activity.id);
+            const response = type === 'sprint'
+                ? await scrumApi.getSprintComments(resource.id)
+                : await scrumApi.getComments(resource.id);
             setComments(response.data);
         } catch (error) {
             console.error('Error fetching comments:', error);
@@ -209,10 +234,11 @@ const CommentsModal = ({ activity, onClose, onRefresh }) => {
 
         setSubmitting(true);
         try {
-            await scrumApi.createComment({
+            const payload = {
                 comment: newComment,
-                activityId: activity.id,
-            });
+                [type === 'sprint' ? 'sprintId' : 'activityId']: resource.id
+            };
+            await scrumApi.createComment(payload);
             setNewComment('');
             fetchComments();
             onRefresh();
@@ -236,13 +262,13 @@ const CommentsModal = ({ activity, onClose, onRefresh }) => {
     };
 
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
             <div className="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-lg max-h-[80vh] flex flex-col shadow-2xl">
                 {/* Header */}
                 <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
                     <div>
                         <h2 className="text-lg font-bold text-slate-900 dark:text-white">Comments</h2>
-                        <p className="text-sm text-slate-500">{activity.titulo}</p>
+                        <p className="text-sm text-slate-500">{resource.titulo || resource.nombre}</p>
                     </div>
                     <button
                         onClick={onClose}
@@ -323,15 +349,17 @@ const CommentsModal = ({ activity, onClose, onRefresh }) => {
 };
 
 // Sprints Panel
-const SprintsPanel = ({ projectId, states, onClose }) => {
+const SprintsPanel = ({ projectId, states, activities = [], onClose, onUpdate, onOpenComments }) => {
     const [sprints, setSprints] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showForm, setShowForm] = useState(false);
+    const [editingSprint, setEditingSprint] = useState(null);
     const [formData, setFormData] = useState({
         nombre: '',
         fechaInicio: '',
         fechaFin: '',
         stateId: '',
+        activityIds: [],
     });
 
     useEffect(() => {
@@ -349,19 +377,37 @@ const SprintsPanel = ({ projectId, states, onClose }) => {
         }
     };
 
+    const handleEdit = (sprint) => {
+        setEditingSprint(sprint);
+        setFormData({
+            nombre: sprint.nombre,
+            fechaInicio: new Date(sprint.fechaInicio).toISOString().split('T')[0],
+            fechaFin: new Date(sprint.fechaFin).toISOString().split('T')[0],
+            stateId: sprint.state?.id || '',
+            activityIds: sprint.sprintBacklogActivities?.map(sba => sba.activityId) || [],
+        });
+        setShowForm(true);
+    };
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
-            await scrumApi.createSprintBacklog({
-                ...formData,
-                projectId,
-            });
-            toast.success('Sprint created');
+            if (editingSprint) {
+                await scrumApi.updateSprintBacklog(editingSprint.id, formData);
+                toast.success('Sprint updated');
+            } else {
+                await scrumApi.createSprintBacklog({
+                    ...formData,
+                    projectId,
+                });
+                toast.success('Sprint created');
+            }
             setShowForm(false);
-            setFormData({ nombre: '', fechaInicio: '', fechaFin: '', stateId: '' });
+            setEditingSprint(null);
+            setFormData({ nombre: '', fechaInicio: '', fechaFin: '', stateId: '', activityIds: [] });
             fetchSprints();
+            if (onUpdate) onUpdate();
         } catch (error) {
-            toast.error('Failed to create sprint');
+            toast.error(editingSprint ? 'Failed to update sprint' : 'Failed to create sprint');
         }
     };
 
@@ -371,10 +417,28 @@ const SprintsPanel = ({ projectId, states, onClose }) => {
             await scrumApi.deleteSprintBacklog(id);
             toast.success('Sprint deleted');
             fetchSprints();
+            if (onUpdate) onUpdate();
         } catch (error) {
             toast.error('Failed to delete sprint');
         }
     };
+
+    const availableActivities = useMemo(() => {
+        // Get IDs of activities assigned to ANY sprint
+        const assignedActivityIds = new Set();
+        sprints.forEach(sprint => {
+            // If we are editing a sprint, we still want to see ITS activities
+            // so we can unchecked them (remove them).
+            // So we only "hide" activities that belong to *other* sprints.
+            if (!editingSprint || sprint.id !== editingSprint.id) {
+                sprint.sprintBacklogActivities?.forEach(sba => {
+                    assignedActivityIds.add(sba.activityId);
+                });
+            }
+        });
+
+        return activities.filter(activity => !assignedActivityIds.has(activity.id));
+    }, [activities, sprints, editingSprint]);
 
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -389,7 +453,11 @@ const SprintsPanel = ({ projectId, states, onClose }) => {
                     </div>
                     <div className="flex items-center gap-2">
                         <button
-                            onClick={() => setShowForm(true)}
+                            onClick={() => {
+                                setEditingSprint(null);
+                                setFormData({ nombre: '', fechaInicio: '', fechaFin: '', stateId: '', activityIds: [] });
+                                setShowForm(true);
+                            }}
                             className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg transition-colors font-medium"
                             style={{ backgroundColor: '#ffcd00', color: '#2e3549' }}
                         >
@@ -433,7 +501,7 @@ const SprintsPanel = ({ projectId, states, onClose }) => {
                                             <div className="flex items-center gap-4 mt-1 text-sm" style={{ color: '#808099' }}>
                                                 <span className="flex items-center gap-1">
                                                     <Clock className="w-4 h-4" />
-                                                    {new Date(sprint.fechaInicio).toLocaleDateString()} - {new Date(sprint.fechaFin).toLocaleDateString()}
+                                                    {new Date(sprint.fechaInicio).toISOString().split('T')[0].replace(/-/g, '/')} - {new Date(sprint.fechaFin).toISOString().split('T')[0].replace(/-/g, '/')}
                                                 </span>
                                             </div>
                                         </div>
@@ -445,6 +513,18 @@ const SprintsPanel = ({ projectId, states, onClose }) => {
                                                 {sprint.state?.nombre}
                                             </span>
                                             <button
+                                                onClick={() => onOpenComments(sprint, fetchSprints)}
+                                                className="p-1.5 text-slate-400 hover:text-indigo-600 rounded bg-white/50"
+                                            >
+                                                <MessageSquare className="w-4 h-4" />
+                                            </button>
+                                            <button
+                                                onClick={() => handleEdit(sprint)}
+                                                className="p-1.5 text-slate-400 hover:text-indigo-600 rounded"
+                                            >
+                                                <Edit2 className="w-4 h-4" />
+                                            </button>
+                                            <button
                                                 onClick={() => handleDelete(sprint.id)}
                                                 className="p-1.5 text-slate-400 hover:text-red-500 rounded"
                                             >
@@ -453,8 +533,16 @@ const SprintsPanel = ({ projectId, states, onClose }) => {
                                         </div>
                                     </div>
 
-                                    <div className="text-sm" style={{ color: '#808099' }}>
-                                        {sprint.sprintBacklogActivities?.length || 0} activities assigned
+                                    <div className="flex items-center justify-between mt-2">
+                                        <div className="text-sm" style={{ color: '#808099' }}>
+                                            {sprint.sprintBacklogActivities?.length || 0} activities assigned
+                                        </div>
+                                        {(sprint.comments?.length || 0) > 0 && (
+                                            <div className="flex items-center gap-1 text-xs font-medium" style={{ color: '#3b82f6' }}>
+                                                <MessageSquare className="w-3.5 h-3.5" />
+                                                {sprint.comments.length}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             ))}
@@ -515,19 +603,77 @@ const SprintsPanel = ({ projectId, states, onClose }) => {
                                         required
                                     >
                                         <option value="">Select status</option>
-                                        {states.map((state) => (
-                                            <option key={state.id} value={state.id}>
-                                                {state.nombre}
-                                            </option>
-                                        ))}
+                                        {states
+                                            .filter(state => state.nombre !== 'Backlog')
+                                            .map((state) => (
+                                                <option key={state.id} value={state.id}>
+                                                    {state.nombre}
+                                                </option>
+                                            ))}
                                     </select>
+                                </div>
+
+                                <div className="col-span-2">
+                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                                        Assign Activities
+                                    </label>
+                                    <div className="border border-slate-200 dark:border-slate-600 rounded-lg max-h-48 overflow-y-auto bg-white dark:bg-slate-700 p-2">
+                                        {availableActivities.length === 0 ? (
+                                            <p className="text-sm text-slate-400 text-center py-2">No available activities</p>
+                                        ) : (
+                                            availableActivities.map((activity) => (
+                                                <div key={activity.id} className="flex items-center gap-2 p-1.5 hover:bg-slate-50 dark:hover:bg-slate-600 rounded cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        id={`activity-${activity.id}`}
+                                                        checked={formData.activityIds.includes(activity.id)}
+                                                        onChange={(e) => {
+                                                            const ids = e.target.checked
+                                                                ? [...formData.activityIds, activity.id]
+                                                                : formData.activityIds.filter(id => id !== activity.id);
+                                                            setFormData({ ...formData, activityIds: ids });
+                                                        }}
+                                                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                                    />
+                                                    <label htmlFor={`activity-${activity.id}`} className="flex-1 text-sm cursor-pointer select-none flex items-center justify-between">
+                                                        <span className="font-medium text-slate-700 dark:text-slate-200">{activity.titulo}</span>
+                                                        <div className="flex items-center gap-2">
+                                                            {activity.user && (
+                                                                <div className="flex items-center gap-1 text-[10px] text-slate-400 font-medium uppercase mr-2">
+                                                                    <User className="w-3 h-3" />
+                                                                    {activity.user.name}
+                                                                </div>
+                                                            )}
+                                                            <span className="text-xs px-2 py-0.5 rounded-full font-medium"
+                                                                style={{
+                                                                    backgroundColor: (states.find(s => s.id === activity.stateId)?.color || '#94a3b8') + '20',
+                                                                    color: states.find(s => s.id === activity.stateId)?.color || '#94a3b8'
+                                                                }}>
+                                                                {states.find(s => s.id === activity.stateId)?.nombre}
+                                                            </span>
+                                                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold uppercase ${activity.priority === 'high' ? 'bg-red-100 text-red-600' :
+                                                                activity.priority === 'medium' ? 'bg-amber-100 text-amber-600' :
+                                                                    'bg-emerald-100 text-emerald-600'
+                                                                }`}>
+                                                                {activity.priority}
+                                                            </span>
+                                                        </div>
+                                                    </label>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
                                 </div>
                             </div>
 
                             <div className="flex gap-2 justify-end">
                                 <button
                                     type="button"
-                                    onClick={() => setShowForm(false)}
+                                    onClick={() => {
+                                        setShowForm(false);
+                                        setEditingSprint(null);
+                                        setFormData({ nombre: '', fechaInicio: '', fechaFin: '', stateId: '', activityIds: [] });
+                                    }}
                                     className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600 rounded-lg"
                                 >
                                     Cancel
@@ -536,7 +682,7 @@ const SprintsPanel = ({ projectId, states, onClose }) => {
                                     type="submit"
                                     className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg"
                                 >
-                                    Create Sprint
+                                    {editingSprint ? 'Update Sprint' : 'Create Sprint'}
                                 </button>
                             </div>
                         </form>
@@ -559,11 +705,12 @@ const ProjectBoard = () => {
     const [activeActivity, setActiveActivity] = useState(null);
     const [showModal, setShowModal] = useState(false);
     const [showSprintsPanel, setShowSprintsPanel] = useState(false);
-    const [commentsActivity, setCommentsActivity] = useState(null);
+    const [commentsResource, setCommentsResource] = useState(null);
     const [editingActivity, setEditingActivity] = useState(null);
     const [targetStateId, setTargetStateId] = useState(null);
     const [showInviteModal, setShowInviteModal] = useState(false);
     const [showMembersPanel, setShowMembersPanel] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
     const [formData, setFormData] = useState({
         titulo: '',
         descriptor: '',
@@ -741,6 +888,19 @@ const ProjectBoard = () => {
                         </div>
                     </div>
 
+                    <div className="flex-1 max-w-md mx-8">
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                            <input
+                                type="text"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                placeholder="Search activities by name..."
+                                className="w-full pl-10 pr-4 py-2 bg-slate-100 dark:bg-slate-700/50 border-transparent focus:bg-white dark:focus:bg-slate-700 border focus:border-indigo-500 rounded-xl text-sm transition-all outline-none"
+                            />
+                        </div>
+                    </div>
+
                     <div className="flex items-center gap-2">
                         <button
                             onClick={() => setShowSprintsPanel(true)}
@@ -788,17 +948,22 @@ const ProjectBoard = () => {
                     onDragEnd={handleDragEnd}
                 >
                     <div className="flex gap-4 overflow-x-auto pb-4">
-                        {states.map((state) => (
-                            <DroppableColumn
-                                key={state.id}
-                                state={state}
-                                activities={activitiesByState[state.id] || []}
-                                onAddActivity={handleAddActivity}
-                                onEditActivity={handleEditActivity}
-                                onDeleteActivity={handleDeleteActivity}
-                                onOpenComments={setCommentsActivity}
-                            />
-                        ))}
+                        {states.map((state) => {
+                            const filteredActivities = (activitiesByState[state.id] || []).filter(activity =>
+                                activity.titulo.toLowerCase().includes(searchTerm.toLowerCase())
+                            );
+                            return (
+                                <DroppableColumn
+                                    key={state.id}
+                                    state={state}
+                                    activities={filteredActivities}
+                                    onAddActivity={handleAddActivity}
+                                    onEditActivity={handleEditActivity}
+                                    onDeleteActivity={handleDeleteActivity}
+                                    onOpenComments={(activity) => setCommentsResource({ resource: activity, type: 'activity' })}
+                                />
+                            );
+                        })}
                     </div>
 
                     <DragOverlay>
@@ -929,11 +1094,12 @@ const ProjectBoard = () => {
             )}
 
             {/* Comments Modal */}
-            {commentsActivity && (
+            {commentsResource && (
                 <CommentsModal
-                    activity={commentsActivity}
-                    onClose={() => setCommentsActivity(null)}
-                    onRefresh={fetchData}
+                    resource={commentsResource.resource}
+                    type={commentsResource.type}
+                    onClose={() => setCommentsResource(null)}
+                    onRefresh={commentsResource.onRefresh || fetchData}
                 />
             )}
 
@@ -942,7 +1108,17 @@ const ProjectBoard = () => {
                 <SprintsPanel
                     projectId={projectId}
                     states={states}
+                    activities={Object.values(activitiesByState).flat()}
                     onClose={() => setShowSprintsPanel(false)}
+                    onUpdate={fetchData}
+                    onOpenComments={(sprint, refreshSprints) => setCommentsResource({
+                        resource: sprint,
+                        type: 'sprint',
+                        onRefresh: () => {
+                            refreshSprints();
+                            fetchData(); // Also refresh board in case sprint status/counts changed
+                        }
+                    })}
                 />
             )}
 
