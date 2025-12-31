@@ -93,6 +93,7 @@ export class RoomsService {
       itemCount: room.items?.length || 0,
       createdAt: room.createdAt,
       updatedAt: room.updatedAt,
+      isPublic: room.isPublic,
     }));
   }
 
