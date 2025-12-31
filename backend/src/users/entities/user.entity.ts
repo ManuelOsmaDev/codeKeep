@@ -48,7 +48,7 @@ export class User {
   @Column({ default: false })
   canManagePasswords: boolean;
 
-  @Column({ default: false })
+  @Column({ default: true })
   canManageSnippets: boolean;
 
   // Google OAuth fields

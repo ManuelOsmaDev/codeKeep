@@ -7,16 +7,12 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { User } from '../users/entities/user.entity';
 
-import { PermissionsGuard } from '../auth/guards/permissions.guard';
-import { RequirePermissions } from '../auth/decorators/permissions.decorator';
-
 @Controller('snippets')
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+@UseGuards(JwtAuthGuard)
 export class SnippetsController {
   constructor(private snippetsService: SnippetsService) {}
 
   @Post()
-  @RequirePermissions('canManageSnippets')
   async create(@CurrentUser() user: User, @Body() createSnippetDto: CreateSnippetDto) {
     return this.snippetsService.create(user.id, createSnippetDto);
   }
@@ -37,7 +33,6 @@ export class SnippetsController {
   }
 
   @Patch(':id')
-  @RequirePermissions('canManageSnippets')
   async update(
     @CurrentUser() user: User,
     @Param('id') id: string,
@@ -47,7 +42,6 @@ export class SnippetsController {
   }
 
   @Delete(':id')
-  @RequirePermissions('canManageSnippets')
   async remove(@CurrentUser() user: User, @Param('id') id: string) {
     await this.snippetsService.remove(id, user.id);
     return { message: 'Snippet deleted successfully' };
