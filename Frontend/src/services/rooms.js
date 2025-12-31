@@ -32,12 +32,17 @@ const roomsApi = {
     },
 
     // Agregar item a room
-    addItemToRoom: async (roomId, itemType, itemId, permissions) => {
-        return api.post(`/rooms/${roomId}/items`, {
+    addItemToRoom: async (roomId, itemType, itemId, permissions, masterPassword = null) => {
+        const payload = {
             itemType,
             itemId,
             permissions,
-        });
+        };
+        // Include masterPassword only for password items
+        if (itemType === 'password' && masterPassword) {
+            payload.masterPassword = masterPassword;
+        }
+        return api.post(`/rooms/${roomId}/items`, payload);
     },
 
     // Quitar item de room
@@ -65,9 +70,24 @@ const roomsApi = {
         return api.delete(`/rooms/${roomId}/users/${encodeURIComponent(userEmail)}`);
     },
 
+    // Update user permissions in a room
+    updateUserPermissions: async (roomId, userEmail, permissions) => {
+        return api.patch(`/rooms/${roomId}/users/${encodeURIComponent(userEmail)}`, permissions);
+    },
+
     // Actualizar permisos de un ítem
     updateItemPermissions: async (roomId, itemId, permissions) => {
         return api.patch(`/rooms/${roomId}/items/${itemId}/permissions`, { permissions });
+    },
+
+    // Unlock a shared password (decrypt and store for sharing)
+    unlockSharedPassword: async (roomId, itemId, masterPassword) => {
+        return api.patch(`/rooms/${roomId}/items/${itemId}/unlock`, { masterPassword });
+    },
+
+    // Update a shared password (for users with edit permission)
+    updateSharedPassword: async (roomId, itemId, newPassword) => {
+        return api.patch(`/rooms/${roomId}/items/${itemId}/password`, { newPassword });
     },
 };
 

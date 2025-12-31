@@ -116,4 +116,40 @@ export class RoomsController {
   ) {
     return this.roomsService.removeUserFromRoom(req.user.id, roomId, email);
   }
+
+  // Update user permissions in a room (requiere auth)
+  @Patch(':roomId/users/:email')
+  @UseGuards(JwtAuthGuard)
+  async updateUserPermissions(
+    @Request() req,
+    @Param('roomId') roomId: string,
+    @Param('email') email: string,
+    @Body() permissions: { canCreate?: boolean; canUpdate?: boolean; canDelete?: boolean; canShare?: boolean; canViewPasswords?: boolean },
+  ) {
+    return this.roomsService.updateUserPermissions(req.user.id, roomId, email, permissions);
+  }
+
+  // Update shared password for an existing shared item (requiere auth)
+  @Patch(':roomId/items/:itemId/unlock')
+  @UseGuards(JwtAuthGuard)
+  async unlockSharedPassword(
+    @Request() req,
+    @Param('roomId') roomId: string,
+    @Param('itemId') itemId: string,
+    @Body('masterPassword') masterPassword: string,
+  ) {
+    return this.roomsService.unlockSharedPassword(req.user.id, roomId, itemId, masterPassword);
+  }
+
+  // Update the shared password value (for users with edit permission)
+  @Patch(':roomId/items/:itemId/password')
+  @UseGuards(JwtAuthGuard)
+  async updateSharedPassword(
+    @Request() req,
+    @Param('roomId') roomId: string,
+    @Param('itemId') itemId: string,
+    @Body('newPassword') newPassword: string,
+  ) {
+    return this.roomsService.updateSharedPassword(req.user.id, req.user.email, roomId, itemId, newPassword);
+  }
 }

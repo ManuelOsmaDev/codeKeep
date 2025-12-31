@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Plus, Trash2, Code2, Key, Search, Check, Copy, Link as LinkIcon, Mail, XCircle, Users, Lock, Globe } from 'lucide-react';
+import { X, Plus, Trash2, Code2, Key, Search, Check, Copy, Link as LinkIcon, Mail, XCircle, Users, Lock, Globe, Edit2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import roomsApi from '../../../services/rooms';
 import { snippets as snippetsApi, passwords as passwordsApi } from '../../../services/api';
@@ -23,6 +23,13 @@ const ManageRoomModal = ({ isOpen, onClose, room, userPermissions }) => {
     const [copied, setCopied] = useState(false);
     const [itemToAdd, setItemToAdd] = useState(null); // {type, id, title}
     const [itemPermissions, setItemPermissions] = useState({}); // {userEmail: {canView: bool, canEdit: bool}}
+
+    // State for master password modal when adding passwords
+    const [masterPasswordModal, setMasterPasswordModal] = useState({ isOpen: false, passwordItem: null });
+    const [masterPasswordInput, setMasterPasswordInput] = useState('');
+
+    // State for editing user permissions
+    const [editingUserPermissions, setEditingUserPermissions] = useState(null); // { email, permissions }
 
     // Determine permissions (default to true if not provided - i.e., owner)
     const canCreate = userPermissions ? userPermissions.canCreate : true;
@@ -81,6 +88,13 @@ const ManageRoomModal = ({ isOpen, onClose, room, userPermissions }) => {
     };
 
     const handleAddItem = (itemType, itemId, title) => {
+        // For passwords, we need to ask for the master password first
+        if (itemType === 'password') {
+            setMasterPasswordModal({ isOpen: true, passwordItem: { id: itemId, title } });
+            setMasterPasswordInput('');
+            return;
+        }
+
         // Si la sala es privada y tiene usuarios, mostrar selector de permisos
         if (!room.isPublic && accessList.length > 0) {
             setItemToAdd({ type: itemType, id: itemId, title });
@@ -96,6 +110,44 @@ const ManageRoomModal = ({ isOpen, onClose, room, userPermissions }) => {
         }
     };
 
+    const handleAddPasswordWithMasterPassword = async () => {
+        if (!masterPasswordInput.trim()) {
+            toast.error('Please enter your master password');
+            return;
+        }
+
+        const { passwordItem } = masterPasswordModal;
+
+        try {
+            // Si la sala es privada y tiene usuarios, mostrar selector de permisos
+            if (!room.isPublic && accessList.length > 0) {
+                setItemToAdd({
+                    type: 'password',
+                    id: passwordItem.id,
+                    title: passwordItem.title,
+                    masterPassword: masterPasswordInput
+                });
+                // Inicializar permisos: todos pueden ver por defecto
+                const initialPerms = {};
+                accessList.forEach(access => {
+                    initialPerms[access.email] = { canView: true, canEdit: false };
+                });
+                setItemPermissions(initialPerms);
+                setMasterPasswordModal({ isOpen: false, passwordItem: null });
+            } else {
+                // Agregar directamente con master password
+                await roomsApi.addItemToRoom(room.id, 'password', passwordItem.id, null, masterPasswordInput);
+                toast.success('Password added to room');
+                setMasterPasswordModal({ isOpen: false, passwordItem: null });
+                setMasterPasswordInput('');
+                fetchRoomData();
+            }
+        } catch (error) {
+            console.error('Error adding password:', error);
+            toast.error(error.response?.data?.message || 'Failed to add password. Check your master password.');
+        }
+    };
+
     const confirmAddItem = async (itemType, itemId, permissions) => {
         try {
             if (itemToAdd?.isEdit) {
@@ -103,12 +155,14 @@ const ManageRoomModal = ({ isOpen, onClose, room, userPermissions }) => {
                 await roomsApi.updateItemPermissions(room.id, itemId, permissions);
                 toast.success('Permisssions updated');
             } else {
-                // Agregar nuevo
-                await roomsApi.addItemToRoom(room.id, itemType, itemId, permissions);
+                // Agregar nuevo - include masterPassword for password items
+                const masterPassword = itemToAdd?.masterPassword || null;
+                await roomsApi.addItemToRoom(room.id, itemType, itemId, permissions, masterPassword);
                 toast.success('Item added to room');
             }
             setItemToAdd(null);
             setItemPermissions({});
+            setMasterPasswordInput('');
             fetchRoomData();
         } catch (error) {
             console.error('Error:', error);
@@ -124,6 +178,20 @@ const ManageRoomModal = ({ isOpen, onClose, room, userPermissions }) => {
         } catch (error) {
             console.error('Error removing item:', error);
             toast.error('Failed to remove item');
+        }
+    };
+
+    const handleUpdateUserPermissions = async () => {
+        if (!editingUserPermissions) return;
+
+        try {
+            await roomsApi.updateUserPermissions(room.id, editingUserPermissions.email, editingUserPermissions.permissions);
+            toast.success('Permissions updated successfully');
+            setEditingUserPermissions(null);
+            fetchAccessList();
+        } catch (error) {
+            console.error('Error updating permissions:', error);
+            toast.error(error.response?.data?.message || 'Failed to update permissions');
         }
     };
 
@@ -541,17 +609,27 @@ const ManageRoomModal = ({ isOpen, onClose, room, userPermissions }) => {
                                         {accessList.map((access) => (
                                             <div
                                                 key={access.id}
-                                                className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg border border-slate-200 dark:border-slate-600"
+                                                className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg border border-slate-200 dark:border-slate-600 hover:border-indigo-300 dark:hover:border-indigo-600 hover:bg-indigo-50/50 dark:hover:bg-indigo-900/20 transition-colors cursor-pointer group"
+                                                onClick={() => setEditingUserPermissions({
+                                                    email: access.email,
+                                                    permissions: {
+                                                        canCreate: access.canCreate,
+                                                        canUpdate: access.canUpdate,
+                                                        canDelete: access.canDelete,
+                                                        canShare: access.canShare,
+                                                        canViewPasswords: access.canViewPasswords
+                                                    }
+                                                })}
                                             >
                                                 <div className="flex items-center gap-3">
                                                     <div className="w-8 h-8 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-full flex items-center justify-center">
                                                         <Mail className="w-4 h-4" />
                                                     </div>
                                                     <div>
-                                                        <p className="font-medium text-slate-900 dark:text-white">
+                                                        <p className="font-medium text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
                                                             {access.email}
                                                         </p>
-                                                        <div className="flex gap-2 mt-1">
+                                                        <div className="flex gap-2 mt-1 flex-wrap">
                                                             {access.canCreate && <span className="text-[10px] bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 px-1.5 py-0.5 rounded">Create</span>}
                                                             {access.canUpdate && <span className="text-[10px] bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">Edit</span>}
                                                             {access.canDelete && <span className="text-[10px] bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 px-1.5 py-0.5 rounded">Delete</span>}
@@ -561,13 +639,21 @@ const ManageRoomModal = ({ isOpen, onClose, room, userPermissions }) => {
                                                         </div>
                                                     </div>
                                                 </div>
-                                                <button
-                                                    onClick={() => handleRemoveUser(access.email)}
-                                                    className="p-2 text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                                                    title="Remove access"
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                </button>
+                                                <div className="flex gap-1 items-center">
+                                                    <span className="text-xs text-slate-400 dark:text-slate-500 mr-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        Click to edit
+                                                    </span>
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleRemoveUser(access.email);
+                                                        }}
+                                                        className="p-2 text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                                        title="Remove access"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                </div>
                                             </div>
                                         ))}
                                     </div>
@@ -672,6 +758,181 @@ const ManageRoomModal = ({ isOpen, onClose, room, userPermissions }) => {
                     </div>
                 )
             }
+
+            {/* Master Password Modal for sharing passwords */}
+            {masterPasswordModal.isOpen && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-6 z-[70]" onClick={() => setMasterPasswordModal({ isOpen: false, passwordItem: null })}>
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-md border border-slate-200 dark:border-slate-700 shadow-xl" onClick={(e) => e.stopPropagation()}>
+                        <div className="p-6 border-b border-slate-200 dark:border-slate-700">
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                                <Key className="w-5 h-5 text-amber-500" />
+                                Master Password Required
+                            </h3>
+                            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                                To share "{masterPasswordModal.passwordItem?.title}", enter your master password to decrypt it.
+                            </p>
+                        </div>
+
+                        <div className="p-6">
+                            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4 mb-4">
+                                <p className="text-sm text-amber-800 dark:text-amber-200">
+                                    <strong>⚠️ Security Notice:</strong> Once shared, the password will be visible to all users with access to this room.
+                                </p>
+                            </div>
+
+                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                                Master Password
+                            </label>
+                            <input
+                                type="password"
+                                value={masterPasswordInput}
+                                onChange={(e) => setMasterPasswordInput(e.target.value)}
+                                placeholder="Enter your master password"
+                                className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-slate-900 dark:text-white"
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        handleAddPasswordWithMasterPassword();
+                                    }
+                                }}
+                                autoFocus
+                            />
+                        </div>
+
+                        <div className="p-4 border-t border-slate-200 dark:border-slate-700 flex gap-2 justify-end">
+                            <button
+                                onClick={() => {
+                                    setMasterPasswordModal({ isOpen: false, passwordItem: null });
+                                    setMasterPasswordInput('');
+                                }}
+                                className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors font-medium"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleAddPasswordWithMasterPassword}
+                                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors font-medium"
+                            >
+                                Share Password
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Edit User Permissions Modal */}
+            {editingUserPermissions && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-6 z-[70]" onClick={() => setEditingUserPermissions(null)}>
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-md border border-slate-200 dark:border-slate-700 shadow-xl" onClick={(e) => e.stopPropagation()}>
+                        <div className="p-6 border-b border-slate-200 dark:border-slate-700">
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                                <Edit2 className="w-5 h-5 text-indigo-500" />
+                                Edit Permissions
+                            </h3>
+                            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                                {editingUserPermissions.email}
+                            </p>
+                        </div>
+
+                        <div className="p-6 space-y-4">
+                            <label className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+                                <div>
+                                    <span className="font-medium text-slate-900 dark:text-white">Create</span>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">Can add items to the room</p>
+                                </div>
+                                <input
+                                    type="checkbox"
+                                    checked={editingUserPermissions.permissions.canCreate}
+                                    onChange={(e) => setEditingUserPermissions({
+                                        ...editingUserPermissions,
+                                        permissions: { ...editingUserPermissions.permissions, canCreate: e.target.checked }
+                                    })}
+                                    className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                />
+                            </label>
+
+                            <label className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+                                <div>
+                                    <span className="font-medium text-slate-900 dark:text-white">Edit</span>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">Can modify items and passwords</p>
+                                </div>
+                                <input
+                                    type="checkbox"
+                                    checked={editingUserPermissions.permissions.canUpdate}
+                                    onChange={(e) => setEditingUserPermissions({
+                                        ...editingUserPermissions,
+                                        permissions: { ...editingUserPermissions.permissions, canUpdate: e.target.checked }
+                                    })}
+                                    className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                />
+                            </label>
+
+                            <label className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+                                <div>
+                                    <span className="font-medium text-slate-900 dark:text-white">Delete</span>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">Can remove items from the room</p>
+                                </div>
+                                <input
+                                    type="checkbox"
+                                    checked={editingUserPermissions.permissions.canDelete}
+                                    onChange={(e) => setEditingUserPermissions({
+                                        ...editingUserPermissions,
+                                        permissions: { ...editingUserPermissions.permissions, canDelete: e.target.checked }
+                                    })}
+                                    className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                />
+                            </label>
+
+                            <label className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+                                <div>
+                                    <span className="font-medium text-slate-900 dark:text-white">Share</span>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">Can manage access list</p>
+                                </div>
+                                <input
+                                    type="checkbox"
+                                    checked={editingUserPermissions.permissions.canShare}
+                                    onChange={(e) => setEditingUserPermissions({
+                                        ...editingUserPermissions,
+                                        permissions: { ...editingUserPermissions.permissions, canShare: e.target.checked }
+                                    })}
+                                    className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                />
+                            </label>
+
+                            <label className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+                                <div>
+                                    <span className="font-medium text-slate-900 dark:text-white">View Passwords</span>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">Can see shared passwords</p>
+                                </div>
+                                <input
+                                    type="checkbox"
+                                    checked={editingUserPermissions.permissions.canViewPasswords}
+                                    onChange={(e) => setEditingUserPermissions({
+                                        ...editingUserPermissions,
+                                        permissions: { ...editingUserPermissions.permissions, canViewPasswords: e.target.checked }
+                                    })}
+                                    className="w-5 h-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                />
+                            </label>
+                        </div>
+
+                        <div className="p-4 border-t border-slate-200 dark:border-slate-700 flex gap-2 justify-end">
+                            <button
+                                onClick={() => setEditingUserPermissions(null)}
+                                className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors font-medium"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleUpdateUserPermissions}
+                                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors font-medium flex items-center gap-2"
+                            >
+                                <Check className="w-4 h-4" />
+                                Save Changes
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div >
     );
 };

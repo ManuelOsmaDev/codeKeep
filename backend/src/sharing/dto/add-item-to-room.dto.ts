@@ -22,6 +22,11 @@ export class AddItemToRoomDto {
   @IsNotEmpty()
   itemId: string;
 
+  // Required when itemType is 'password' to decrypt and share the actual password
+  @IsOptional()
+  @IsString()
+  masterPassword?: string;
+
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Folder, Code2, Key, Calendar, Eye, EyeOff, Copy, Check, AlertCircle, Shield, Plus, Share2, ArrowLeft, Lock } from 'lucide-react';
+import { Folder, Code2, Key, Calendar, Eye, EyeOff, Copy, Check, AlertCircle, Shield, Plus, Share2, ArrowLeft, Lock, Edit2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import roomsApi from '../../../services/rooms';
 import { highlightCode } from '../utils/codeHighlight';
@@ -30,6 +30,10 @@ const SharedRoomView = () => {
         type: 'danger',
         confirmText: 'Confirm',
     });
+
+    // State for editing shared passwords
+    const [editPasswordModal, setEditPasswordModal] = useState({ isOpen: false, itemId: null, passwordName: '', currentPassword: '' });
+    const [newPasswordValue, setNewPasswordValue] = useState('');
 
     useEffect(() => {
         if (token) {
@@ -100,6 +104,32 @@ const SharedRoomView = () => {
             type: 'danger',
             confirmText: 'Remove',
         });
+    };
+
+    const isPasswordProtected = (password) => {
+        return !password || password === '[Protected - Contact owner for access]' || password.includes('[Protected');
+    };
+
+    const canEditPassword = () => {
+        return permissions.isOwner || permissions.canUpdate;
+    };
+
+    const handleUpdatePassword = async () => {
+        if (!newPasswordValue.trim()) {
+            toast.error('Please enter a new password');
+            return;
+        }
+
+        try {
+            await roomsApi.updateSharedPassword(room.id, editPasswordModal.itemId, newPasswordValue);
+            toast.success('Password updated successfully!');
+            setEditPasswordModal({ isOpen: false, itemId: null, passwordName: '', currentPassword: '' });
+            setNewPasswordValue('');
+            fetchRoom();
+        } catch (error) {
+            console.error('Error updating password:', error);
+            toast.error(error.response?.data?.message || 'Failed to update password');
+        }
     };
 
     if (loading) {
@@ -306,39 +336,67 @@ const SharedRoomView = () => {
 
                                     <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-3 border border-slate-100 dark:border-slate-700/50 flex items-center justify-between mb-4">
                                         <div className="font-mono text-sm text-slate-600 dark:text-slate-300 truncate mr-2">
-                                            {showPasswords ? password.password : '••••••••••••••••'}
+                                            {isPasswordProtected(password.password) ? (
+                                                <span className="text-amber-600 dark:text-amber-400 italic text-xs">
+                                                    🔒 Contact owner to re-share
+                                                </span>
+                                            ) : (
+                                                showPasswords ? password.password : '••••••••••••••••'
+                                            )}
                                         </div>
-                                        <button
-                                            onClick={() => copyToClipboard(password.password, `pass-${id}`)}
-                                            className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded transition-colors"
-                                            title="Copy Password"
-                                        >
-                                            {copiedId === `pass-${id}` ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
-                                        </button>
+                                        {!isPasswordProtected(password.password) && (
+                                            <button
+                                                onClick={() => copyToClipboard(password.password, `pass-${id}`)}
+                                                className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded transition-colors"
+                                                title="Copy Password"
+                                            >
+                                                {copiedId === `pass-${id}` ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+                                            </button>
+                                        )}
                                     </div>
 
                                     <div className="pt-3 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between">
                                         <span className="text-xs text-slate-400 dark:text-slate-500">
-                                            Securely shared
+                                            {isPasswordProtected(password.password) ? 'Needs re-share' : 'Securely shared'}
                                         </span>
-                                        <button
-                                            onClick={() => {
-                                                copyToClipboard(password.username, `user-${id}`);
-                                            }}
-                                            className="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 flex items-center gap-1"
-                                        >
-                                            {copiedId === `user-${id}` ? (
-                                                <>
-                                                    <Check className="w-3 h-3" />
-                                                    Copied
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <Copy className="w-3 h-3" />
-                                                    Copy User
-                                                </>
+                                        <div className="flex items-center gap-2">
+                                            {!isPasswordProtected(password.password) && canEditPassword() && (
+                                                <button
+                                                    onClick={() => {
+                                                        setEditPasswordModal({
+                                                            isOpen: true,
+                                                            itemId: id,
+                                                            passwordName: password.name,
+                                                            currentPassword: password.password
+                                                        });
+                                                        setNewPasswordValue(password.password);
+                                                    }}
+                                                    className="text-sm font-medium text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 flex items-center gap-1"
+                                                    title="Edit Password"
+                                                >
+                                                    <Edit2 className="w-3 h-3" />
+                                                    Edit
+                                                </button>
                                             )}
-                                        </button>
+                                            <button
+                                                onClick={() => {
+                                                    copyToClipboard(password.username, `user-${id}`);
+                                                }}
+                                                className="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 flex items-center gap-1"
+                                            >
+                                                {copiedId === `user-${id}` ? (
+                                                    <>
+                                                        <Check className="w-3 h-3" />
+                                                        Copied
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Copy className="w-3 h-3" />
+                                                        Copy User
+                                                    </>
+                                                )}
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             ))}
@@ -375,6 +433,61 @@ const SharedRoomView = () => {
                 type={confirmModal.type}
                 confirmText={confirmModal.confirmText}
             />
+
+            {/* Edit Password Modal */}
+            {editPasswordModal.isOpen && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-6 z-50" onClick={() => setEditPasswordModal({ isOpen: false, itemId: null, passwordName: '', currentPassword: '' })}>
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-md border border-slate-200 dark:border-slate-700 shadow-xl" onClick={(e) => e.stopPropagation()}>
+                        <div className="p-6 border-b border-slate-200 dark:border-slate-700">
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                                <Edit2 className="w-5 h-5 text-amber-500" />
+                                Edit Password
+                            </h3>
+                            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                                Update the password for "{editPasswordModal.passwordName}"
+                            </p>
+                        </div>
+
+                        <div className="p-6">
+                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                                New Password
+                            </label>
+                            <input
+                                type="text"
+                                value={newPasswordValue}
+                                onChange={(e) => setNewPasswordValue(e.target.value)}
+                                placeholder="Enter new password"
+                                className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-slate-900 dark:text-white font-mono"
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        handleUpdatePassword();
+                                    }
+                                }}
+                                autoFocus
+                            />
+                        </div>
+
+                        <div className="p-4 border-t border-slate-200 dark:border-slate-700 flex gap-2 justify-end">
+                            <button
+                                onClick={() => {
+                                    setEditPasswordModal({ isOpen: false, itemId: null, passwordName: '', currentPassword: '' });
+                                    setNewPasswordValue('');
+                                }}
+                                className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors font-medium"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleUpdatePassword}
+                                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors font-medium flex items-center gap-2"
+                            >
+                                <Check className="w-4 h-4" />
+                                Save
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

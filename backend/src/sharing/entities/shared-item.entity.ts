@@ -23,6 +23,11 @@ export class SharedItem {
   @Column()
   itemId: string;
 
+  // Para passwords: almacena la contraseña desencriptada para compartir
+  // Solo se usa cuando itemType === 'password'
+  @Column({ nullable: true, type: 'text' })
+  sharedPassword: string;
+
   @CreateDateColumn()
   addedAt: Date;
 }
