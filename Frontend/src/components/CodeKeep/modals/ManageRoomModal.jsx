@@ -4,8 +4,8 @@ import { toast } from 'react-hot-toast';
 import roomsApi from '../../../services/rooms';
 import { snippets as snippetsApi, passwords as passwordsApi } from '../../../services/api';
 
-const ManageRoomModal = ({ isOpen, onClose, room, userPermissions }) => {
-    const [activeTab, setActiveTab] = useState('current'); // 'current', 'add', or 'access'
+const ManageRoomModal = ({ isOpen, onClose, room, userPermissions, initialTab }) => {
+    const [activeTab, setActiveTab] = useState(initialTab || 'current'); // 'current', 'add', or 'access'
     const [roomItems, setRoomItems] = useState([]);
     const [availableSnippets, setAvailableSnippets] = useState([]);
     const [availablePasswords, setAvailablePasswords] = useState([]);
@@ -14,15 +14,16 @@ const ManageRoomModal = ({ isOpen, onClose, room, userPermissions }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [emailInput, setEmailInput] = useState('');
     const [permissions, setPermissions] = useState({
-        canCreate: true,
-        canUpdate: true,
+        canCreate: false,
+        canUpdate: false,
         canDelete: false,
         canShare: false,
         canViewPasswords: false
     });
     const [copied, setCopied] = useState(false);
     const [itemToAdd, setItemToAdd] = useState(null); // {type, id, title}
-    const [itemPermissions, setItemPermissions] = useState({}); // {userEmail: {canView: bool, canEdit: bool}}
+    // New state to track newly added user to open permissions modal
+    const [justAddedUserEmail, setJustAddedUserEmail] = useState(null);
 
     // State for master password modal when adding passwords
     const [masterPasswordModal, setMasterPasswordModal] = useState({ isOpen: false, passwordItem: null });
@@ -38,12 +39,17 @@ const ManageRoomModal = ({ isOpen, onClose, room, userPermissions }) => {
 
     useEffect(() => {
         if (isOpen && room) {
+            // Update active tab based on intent if provided
+            if (initialTab) setActiveTab(initialTab);
+
             fetchRoomData();
             if (!room.isPublic) {
                 fetchAccessList();
             }
+
         }
-    }, [isOpen, room]);
+    }, [isOpen, room, initialTab]);
+
 
     const fetchRoomData = async () => {
         setLoading(true);
@@ -81,7 +87,26 @@ const ManageRoomModal = ({ isOpen, onClose, room, userPermissions }) => {
     const fetchAccessList = async () => {
         try {
             const response = await roomsApi.getRoomAccessList(room.id);
-            setAccessList(response.data || []);
+            const newList = response.data || [];
+            setAccessList(newList);
+
+            // If we just added a user, find them and open emissions modal
+            if (justAddedUserEmail) {
+                const newUser = newList.find(u => u.email === justAddedUserEmail);
+                if (newUser) {
+                    setEditingUserPermissions({
+                        email: newUser.email,
+                        permissions: {
+                            canCreate: newUser.canCreate,
+                            canUpdate: newUser.canUpdate,
+                            canDelete: newUser.canDelete,
+                            canShare: newUser.canShare,
+                            canViewPasswords: newUser.canViewPasswords
+                        }
+                    });
+                    setJustAddedUserEmail(null);
+                }
+            }
         } catch (error) {
             console.error('Error loading access list:', error);
         }
@@ -95,19 +120,8 @@ const ManageRoomModal = ({ isOpen, onClose, room, userPermissions }) => {
             return;
         }
 
-        // Si la sala es privada y tiene usuarios, mostrar selector de permisos
-        if (!room.isPublic && accessList.length > 0) {
-            setItemToAdd({ type: itemType, id: itemId, title });
-            // Inicializar permisos: todos pueden ver por defecto
-            const initialPerms = {};
-            accessList.forEach(access => {
-                initialPerms[access.email] = { canView: true, canEdit: false };
-            });
-            setItemPermissions(initialPerms);
-        } else {
-            // Si es pública o no tiene usuarios, agregar directamente
-            confirmAddItem(itemType, itemId, null);
-        }
+        // Mostrar modal de confirmación
+        setItemToAdd({ type: itemType, id: itemId, title });
     };
 
     const handleAddPasswordWithMasterPassword = async () => {
@@ -119,49 +133,28 @@ const ManageRoomModal = ({ isOpen, onClose, room, userPermissions }) => {
         const { passwordItem } = masterPasswordModal;
 
         try {
-            // Si la sala es privada y tiene usuarios, mostrar selector de permisos
-            if (!room.isPublic && accessList.length > 0) {
-                setItemToAdd({
-                    type: 'password',
-                    id: passwordItem.id,
-                    title: passwordItem.title,
-                    masterPassword: masterPasswordInput
-                });
-                // Inicializar permisos: todos pueden ver por defecto
-                const initialPerms = {};
-                accessList.forEach(access => {
-                    initialPerms[access.email] = { canView: true, canEdit: false };
-                });
-                setItemPermissions(initialPerms);
-                setMasterPasswordModal({ isOpen: false, passwordItem: null });
-            } else {
-                // Agregar directamente con master password
-                await roomsApi.addItemToRoom(room.id, 'password', passwordItem.id, null, masterPasswordInput);
-                toast.success('Password added to room');
-                setMasterPasswordModal({ isOpen: false, passwordItem: null });
-                setMasterPasswordInput('');
-                fetchRoomData();
-            }
+            // Mostrar modal de confirmación después de la contraseña maestra
+            setItemToAdd({
+                type: 'password',
+                id: passwordItem.id,
+                title: passwordItem.title,
+                masterPassword: masterPasswordInput
+            });
+            setMasterPasswordModal({ isOpen: false, passwordItem: null });
         } catch (error) {
             console.error('Error adding password:', error);
             toast.error(error.response?.data?.message || 'Failed to add password. Check your master password.');
         }
     };
 
-    const confirmAddItem = async (itemType, itemId, permissions) => {
+    const confirmAddItem = async (itemType, itemId) => {
         try {
-            if (itemToAdd?.isEdit) {
-                // Editar permisos
-                await roomsApi.updateItemPermissions(room.id, itemId, permissions);
-                toast.success('Permisssions updated');
-            } else {
-                // Agregar nuevo - include masterPassword for password items
-                const masterPassword = itemToAdd?.masterPassword || null;
-                await roomsApi.addItemToRoom(room.id, itemType, itemId, permissions, masterPassword);
-                toast.success('Item added to room');
-            }
+            // Agregar nuevo - include masterPassword for password items
+            const masterPassword = itemToAdd?.masterPassword || null;
+            await roomsApi.addItemToRoom(room.id, itemType, itemId, null, masterPassword);
+            toast.success('Item added to room');
+
             setItemToAdd(null);
-            setItemPermissions({});
             setMasterPasswordInput('');
             fetchRoomData();
         } catch (error) {
@@ -211,14 +204,8 @@ const ManageRoomModal = ({ isOpen, onClose, room, userPermissions }) => {
             await roomsApi.addUserToRoom(room.id, email, permissions);
             toast.success('User added to room');
             setEmailInput('');
-            // Reset permissions to default
-            setPermissions({
-                canCreate: true,
-                canUpdate: true,
-                canDelete: false,
-                canShare: false,
-                canViewPasswords: false
-            });
+            // Set flag to open permissions modal after fetch
+            setJustAddedUserEmail(email);
             fetchAccessList();
         } catch (error) {
             console.error('Error adding user:', error);
@@ -389,7 +376,7 @@ const ManageRoomModal = ({ isOpen, onClose, room, userPermissions }) => {
                                             </div>
                                             <div>
                                                 <p className="font-medium text-slate-900 dark:text-white">
-                                                    {item.itemData?.title || 'Unknown Item'}
+                                                    {item.itemData?.title || item.itemData?.name || 'Unknown Item'}
                                                 </p>
                                                 <p className="text-xs text-slate-500 dark:text-slate-400 capitalize">
                                                     {item.itemType}
@@ -397,28 +384,6 @@ const ManageRoomModal = ({ isOpen, onClose, room, userPermissions }) => {
                                             </div>
                                         </div>
                                         <div className="flex gap-2">
-                                            {!room.isPublic && accessList.length > 0 && (
-                                                <button
-                                                    onClick={() => {
-                                                        setItemToAdd({
-                                                            type: item.itemType,
-                                                            id: item.id,
-                                                            title: item.itemData?.title || 'Unknown',
-                                                            isEdit: true
-                                                        });
-                                                        // Cargar permisos existentes (por ahora vacío, luego implementar)
-                                                        const initialPerms = {};
-                                                        accessList.forEach(access => {
-                                                            initialPerms[access.email] = { canView: true, canEdit: false };
-                                                        });
-                                                        setItemPermissions(initialPerms);
-                                                    }}
-                                                    className="p-2 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-colors"
-                                                    title="Manage permissions"
-                                                >
-                                                    <Users className="w-4 h-4" />
-                                                </button>
-                                            )}
                                             {canDelete && (
                                                 <button
                                                     onClick={() => handleRemoveItem(item.id)}
@@ -538,60 +503,11 @@ const ManageRoomModal = ({ isOpen, onClose, room, userPermissions }) => {
                                     </div>
                                     <button
                                         type="submit"
-                                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors font-medium flex items-center gap-2"
+                                        className="px-4 py-2 bg-[#ffcd00] hover:bg-[#e6b900] text-[#2e3549] rounded-lg transition-colors font-semibold flex items-center gap-2"
                                     >
                                         <Plus className="w-4 h-4" />
                                         Add
                                     </button>
-                                </div>
-
-                                {/* Permissions Checkboxes */}
-                                <div className="flex flex-wrap gap-4 px-1">
-                                    <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
-                                        <input
-                                            type="checkbox"
-                                            checked={permissions.canCreate}
-                                            onChange={(e) => setPermissions({ ...permissions, canCreate: e.target.checked })}
-                                            className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                                        />
-                                        Create
-                                    </label>
-                                    <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
-                                        <input
-                                            type="checkbox"
-                                            checked={permissions.canUpdate}
-                                            onChange={(e) => setPermissions({ ...permissions, canUpdate: e.target.checked })}
-                                            className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                                        />
-                                        Edit
-                                    </label>
-                                    <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
-                                        <input
-                                            type="checkbox"
-                                            checked={permissions.canDelete}
-                                            onChange={(e) => setPermissions({ ...permissions, canDelete: e.target.checked })}
-                                            className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                                        />
-                                        Delete
-                                    </label>
-                                    <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
-                                        <input
-                                            type="checkbox"
-                                            checked={permissions.canShare}
-                                            onChange={(e) => setPermissions({ ...permissions, canShare: e.target.checked })}
-                                            className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                                        />
-                                        Share
-                                    </label>
-                                    <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
-                                        <input
-                                            type="checkbox"
-                                            checked={permissions.canViewPasswords}
-                                            onChange={(e) => setPermissions({ ...permissions, canViewPasswords: e.target.checked })}
-                                            className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                                        />
-                                        View Passwords
-                                    </label>
                                 </div>
                             </form>
 
@@ -629,13 +545,13 @@ const ManageRoomModal = ({ isOpen, onClose, room, userPermissions }) => {
                                                         <p className="font-medium text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
                                                             {access.email}
                                                         </p>
-                                                        <div className="flex gap-2 mt-1 flex-wrap">
-                                                            {access.canCreate && <span className="text-[10px] bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 px-1.5 py-0.5 rounded">Create</span>}
-                                                            {access.canUpdate && <span className="text-[10px] bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">Edit</span>}
-                                                            {access.canDelete && <span className="text-[10px] bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 px-1.5 py-0.5 rounded">Delete</span>}
-                                                            {access.canShare && <span className="text-[10px] bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 px-1.5 py-0.5 rounded">Share</span>}
-                                                            {access.canViewPasswords && <span className="text-[10px] bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 rounded">View Passwords</span>}
-                                                            {!access.canCreate && !access.canUpdate && !access.canDelete && !access.canShare && !access.canViewPasswords && <span className="text-[10px] bg-slate-100 dark:bg-slate-700 text-slate-500 px-1.5 py-0.5 rounded">View Only</span>}
+                                                        <div className="flex gap-2 mt-1.5 flex-wrap">
+                                                            {access.canCreate && <span className="text-[10px] bg-green-50 text-green-600 px-2 py-0.5 rounded font-medium border border-green-100">Create</span>}
+                                                            {access.canUpdate && <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded font-medium border border-blue-100">Edit</span>}
+                                                            {access.canDelete && <span className="text-[10px] bg-red-50 text-red-600 px-2 py-0.5 rounded font-medium border border-red-100">Delete</span>}
+                                                            {access.canShare && <span className="text-[10px] bg-purple-50 text-purple-600 px-2 py-0.5 rounded font-medium border border-purple-100">Share</span>}
+                                                            {access.canViewPasswords && <span className="text-[10px] bg-amber-50 text-amber-600 px-2 py-0.5 rounded font-medium border border-amber-100">View Passwords</span>}
+                                                            {!access.canCreate && !access.canUpdate && !access.canDelete && !access.canShare && !access.canViewPasswords && <span className="text-[10px] bg-slate-50 text-slate-500 px-2 py-0.5 rounded border border-slate-100">View Only</span>}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -664,14 +580,14 @@ const ManageRoomModal = ({ isOpen, onClose, room, userPermissions }) => {
                 </div >
 
                 {/* Footer */}
-                < div className="p-4 border-t border-slate-200 dark:border-slate-700 flex justify-end" >
+                <div className="p-4 border-t border-slate-200 dark:border-slate-700 flex justify-end">
                     <button
                         onClick={onClose}
-                        className="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg transition-colors font-medium"
+                        className="px-8 py-2.5 bg-[#2e3549] hover:bg-[#1e2330] text-white rounded-xl transition-all font-bold shadow-lg shadow-[#2e3549]/20"
                     >
                         Done
                     </button>
-                </div >
+                </div>
             </div >
 
             {/* Permission Selector Modal */}
@@ -681,53 +597,22 @@ const ManageRoomModal = ({ isOpen, onClose, room, userPermissions }) => {
                         <div className="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-md border border-slate-200 dark:border-slate-700 shadow-xl" onClick={(e) => e.stopPropagation()}>
                             <div className="p-6 border-b border-slate-200 dark:border-slate-700">
                                 <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-                                    {itemToAdd.isEdit ? 'Manage Permissions' : 'Select Permissions'}
+                                    Confirm Addition
                                 </h3>
                                 <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{itemToAdd.title}</p>
                             </div>
 
-                            <div className="p-6 max-h-96 overflow-y-auto">
-                                <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">Choose who can view or edit this item:</p>
-                                <div className="space-y-3">
-                                    {accessList.map((access) => (
-                                        <div key={access.email} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
-                                            <span className="text-sm font-medium text-slate-900 dark:text-white">{access.email}</span>
-                                            <div className="flex gap-3">
-                                                <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={itemPermissions[access.email]?.canView || false}
-                                                        onChange={(e) => setItemPermissions({
-                                                            ...itemPermissions,
-                                                            [access.email]: {
-                                                                ...itemPermissions[access.email],
-                                                                canView: e.target.checked,
-                                                                canEdit: e.target.checked ? itemPermissions[access.email]?.canEdit : false
-                                                            }
-                                                        })}
-                                                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                                                    />
-                                                    View
-                                                </label>
-                                                <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={itemPermissions[access.email]?.canEdit || false}
-                                                        disabled={!itemPermissions[access.email]?.canView}
-                                                        onChange={(e) => setItemPermissions({
-                                                            ...itemPermissions,
-                                                            [access.email]: {
-                                                                ...itemPermissions[access.email],
-                                                                canEdit: e.target.checked
-                                                            }
-                                                        })}
-                                                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 disabled:opacity-50"
-                                                    />
-                                                    Edit
-                                                </label>
-                                            </div>
-                                        </div>
-                                    ))}
+                            <div className="p-6">
+                                <div className="text-center py-4">
+                                    <div className="w-16 h-16 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-full flex items-center justify-center mx-auto mb-4">
+                                        {itemToAdd.type === 'snippet' ? <Code2 className="w-8 h-8" /> : <Key className="w-8 h-8" />}
+                                    </div>
+                                    <p className="text-slate-600 dark:text-slate-400">
+                                        Are you sure you want to add this {itemToAdd.type} to the room?
+                                    </p>
+                                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">
+                                        It will be visible to all members according to room permissions.
+                                    </p>
                                 </div>
                             </div>
 
@@ -739,19 +624,10 @@ const ManageRoomModal = ({ isOpen, onClose, room, userPermissions }) => {
                                     Cancel
                                 </button>
                                 <button
-                                    onClick={() => {
-                                        const perms = Object.entries(itemPermissions)
-                                            .filter(([_, p]) => p.canView)
-                                            .map(([email, p]) => ({
-                                                userEmail: email,
-                                                canView: p.canView,
-                                                canEdit: p.canEdit
-                                            }));
-                                        confirmAddItem(itemToAdd.type, itemToAdd.id, perms.length > 0 ? perms : null);
-                                    }}
+                                    onClick={() => confirmAddItem(itemToAdd.type, itemToAdd.id)}
                                     className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors font-medium"
                                 >
-                                    {itemToAdd.isEdit ? 'Update Permissions' : 'Add Item'}
+                                    Add Item
                                 </button>
                             </div>
                         </div>

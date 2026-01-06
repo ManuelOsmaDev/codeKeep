@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Folder, Code2, Key, Calendar, Eye, EyeOff, Copy, Check, AlertCircle, Shield, Plus, Share2, ArrowLeft, Lock, Edit2 } from 'lucide-react';
+import { Folder, Code2, Key, Calendar, Eye, EyeOff, Copy, Check, AlertCircle, Shield, Plus, Share2, ArrowLeft, Lock, Edit2, Trash2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import roomsApi from '../../../services/rooms';
 import { highlightCode } from '../utils/codeHighlight';
@@ -34,6 +34,7 @@ const SharedRoomView = () => {
     // State for editing shared passwords
     const [editPasswordModal, setEditPasswordModal] = useState({ isOpen: false, itemId: null, passwordName: '', currentPassword: '' });
     const [newPasswordValue, setNewPasswordValue] = useState('');
+    const [initialModalTab, setInitialModalTab] = useState('current');
 
     useEffect(() => {
         if (token) {
@@ -83,7 +84,8 @@ const SharedRoomView = () => {
         }
     };
 
-    const handleDeleteSnippet = async (itemId) => {
+    const handleRemoveItem = async (itemId, itemType = 'item') => {
+        const typeLabel = itemType === 'snippet' ? 'Snippet' : 'Credential';
         setConfirmModal({
             isOpen: true,
             onConfirm: async () => {
@@ -93,14 +95,14 @@ const SharedRoomView = () => {
                         ...prev,
                         items: prev.items.filter(item => item.id !== itemId)
                     }));
-                    toast.success('Snippet removed from room');
+                    toast.success(`${typeLabel} removed from room`);
                     setConfirmModal(prev => ({ ...prev, isOpen: false }));
                 } catch (error) {
-                    toast.error('Failed to remove snippet');
+                    toast.error(`Failed to remove ${typeLabel.toLowerCase()}`);
                 }
             },
-            title: 'Remove Snippet',
-            message: 'Are you sure you want to remove this snippet from the room?',
+            title: `Remove ${typeLabel}`,
+            message: `Are you sure you want to remove this ${typeLabel.toLowerCase()} from the room?`,
             type: 'danger',
             confirmText: 'Remove',
         });
@@ -177,17 +179,22 @@ const SharedRoomView = () => {
                     </button>
 
                     <div className="flex items-center gap-3">
-                        <button
-                            onClick={() => setShowPasswords(!showPasswords)}
-                            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border ${showPasswords ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border-transparent hover:bg-slate-200 dark:hover:bg-slate-600'}`}
-                        >
-                            {showPasswords ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                            <span>{showPasswords ? 'Hide Secrets' : 'Show Secrets'}</span>
-                        </button>
+                        {permissions.canViewPasswords && (
+                            <button
+                                onClick={() => setShowPasswords(!showPasswords)}
+                                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border ${showPasswords ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border-transparent hover:bg-slate-200 dark:hover:bg-slate-600'}`}
+                            >
+                                {showPasswords ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                <span>{showPasswords ? 'Hide Secrets' : 'Show Secrets'}</span>
+                            </button>
+                        )}
 
                         {permissions.canShare && (
                             <button
-                                onClick={() => setIsManageModalOpen(true)}
+                                onClick={() => {
+                                    setInitialModalTab('access');
+                                    setIsManageModalOpen(true);
+                                }}
                                 className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 rounded-lg text-sm font-medium transition-colors"
                             >
                                 <Share2 className="w-4 h-4" />
@@ -197,7 +204,10 @@ const SharedRoomView = () => {
 
                         {permissions.canCreate && (
                             <button
-                                onClick={() => setIsManageModalOpen(true)}
+                                onClick={() => {
+                                    setInitialModalTab('add');
+                                    setIsManageModalOpen(true);
+                                }}
                                 className="flex items-center gap-2 px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
                             >
                                 <Plus className="w-4 h-4" />
@@ -280,20 +290,21 @@ const SharedRoomView = () => {
                             </span>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {snippets.map(({ itemData: snippet, id: itemId }) => (
                                 <SnippetCard
                                     key={itemId}
                                     snippet={snippet}
-                                    canEdit={permissions.canUpdate}
+                                    canEdit={permissions.isOwner || permissions.canUpdate}
                                     canDelete={permissions.canDelete}
                                     onEdit={() => setEditingSnippet(snippet)}
-                                    onDelete={() => handleDeleteSnippet(itemId)}
+                                    onDelete={() => handleRemoveItem(itemId, 'snippet')}
                                     onCopy={() => copyToClipboard(snippet.code, snippet.id)}
                                     isFavorite={false}
                                     isBookmarked={false}
                                     onToggleFavorite={() => { }}
                                     onToggleBookmark={() => { }}
+                                    compact={true}
                                 />
                             ))}
                         </div>
@@ -328,7 +339,7 @@ const SharedRoomView = () => {
                                     </div>
 
                                     <h3 className="font-bold text-lg text-slate-900 dark:text-white mb-1 truncate">
-                                        {password.name}
+                                        {password.title || password.name}
                                     </h3>
                                     <p className="text-sm text-slate-500 dark:text-slate-400 mb-4 truncate">
                                         {password.username}
@@ -360,22 +371,31 @@ const SharedRoomView = () => {
                                             {isPasswordProtected(password.password) ? 'Needs re-share' : 'Securely shared'}
                                         </span>
                                         <div className="flex items-center gap-2">
-                                            {!isPasswordProtected(password.password) && canEditPassword() && (
+                                            {canEditPassword() && (
                                                 <button
                                                     onClick={() => {
                                                         setEditPasswordModal({
                                                             isOpen: true,
                                                             itemId: id,
-                                                            passwordName: password.name,
+                                                            passwordName: password.title || password.name,
                                                             currentPassword: password.password
                                                         });
-                                                        setNewPasswordValue(password.password);
+                                                        setNewPasswordValue(isPasswordProtected(password.password) ? '' : password.password);
                                                     }}
                                                     className="text-sm font-medium text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 flex items-center gap-1"
-                                                    title="Edit Password"
+                                                    title="Editar Password"
                                                 >
                                                     <Edit2 className="w-3 h-3" />
-                                                    Edit
+                                                    Editar
+                                                </button>
+                                            )}
+                                            {permissions.canDelete && (
+                                                <button
+                                                    onClick={() => handleRemoveItem(id, 'password')}
+                                                    className="p-1.5 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-lg transition-colors"
+                                                    title="Remove from room"
+                                                >
+                                                    <Trash2 className="w-3.5 h-3.5" />
                                                 </button>
                                             )}
                                             <button
@@ -413,6 +433,7 @@ const SharedRoomView = () => {
                 }}
                 room={room}
                 userPermissions={permissions}
+                initialTab={initialModalTab}
             />
 
             {editingSnippet && (
@@ -441,7 +462,7 @@ const SharedRoomView = () => {
                         <div className="p-6 border-b border-slate-200 dark:border-slate-700">
                             <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
                                 <Edit2 className="w-5 h-5 text-amber-500" />
-                                Edit Password
+                                Editar Password
                             </h3>
                             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
                                 Update the password for "{editPasswordModal.passwordName}"

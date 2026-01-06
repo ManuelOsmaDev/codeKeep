@@ -33,6 +33,8 @@ const ActivityCard = ({ activity, onEdit, onDelete, onOpenComments }) => {
         data: { activity },
     });
 
+
+
     const style = transform
         ? {
             transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
@@ -52,7 +54,7 @@ const ActivityCard = ({ activity, onEdit, onDelete, onOpenComments }) => {
         <div
             ref={setNodeRef}
             style={{ ...style, backgroundColor: '#fff', border: '1px solid #eaebed' }}
-            className={`rounded-xl p-4 transition-all group ${isDragging ? 'opacity-50 scale-105' : ''}`}
+            className={`rounded-xl px-4 pb-4 pt-7 transition-all group ${isDragging ? 'opacity-50 scale-105' : ''}`}
         >
             {/* Header with buttons - NOT draggable */}
             <div className="flex items-start justify-between mb-2">
@@ -358,9 +360,10 @@ const SprintsPanel = ({ projectId, states, activities = [], onClose, onUpdate, o
         nombre: '',
         fechaInicio: '',
         fechaFin: '',
-        stateId: '',
+        stateId: states.find(s => s.nombre === 'To Do')?.id || '',
         activityIds: [],
     });
+    const [activitySearchTerm, setActivitySearchTerm] = useState('');
 
     useEffect(() => {
         fetchSprints();
@@ -403,7 +406,8 @@ const SprintsPanel = ({ projectId, states, activities = [], onClose, onUpdate, o
             }
             setShowForm(false);
             setEditingSprint(null);
-            setFormData({ nombre: '', fechaInicio: '', fechaFin: '', stateId: '', activityIds: [] });
+            setFormData({ nombre: '', fechaInicio: '', fechaFin: '', stateId: states.find(s => s.nombre === 'To Do')?.id || '', activityIds: [] });
+            setActivitySearchTerm('');
             fetchSprints();
             if (onUpdate) onUpdate();
         } catch (error) {
@@ -455,7 +459,8 @@ const SprintsPanel = ({ projectId, states, activities = [], onClose, onUpdate, o
                         <button
                             onClick={() => {
                                 setEditingSprint(null);
-                                setFormData({ nombre: '', fechaInicio: '', fechaFin: '', stateId: '', activityIds: [] });
+                                setFormData({ nombre: '', fechaInicio: '', fechaFin: '', stateId: states.find(s => s.nombre === 'To Do')?.id || '', activityIds: [] });
+                                setActivitySearchTerm('');
                                 setShowForm(true);
                             }}
                             className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg transition-colors font-medium"
@@ -602,7 +607,6 @@ const SprintsPanel = ({ projectId, states, activities = [], onClose, onUpdate, o
                                         className="w-full px-3 py-2 border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
                                         required
                                     >
-                                        <option value="">Select status</option>
                                         {states
                                             .filter(state => state.nombre !== 'Backlog')
                                             .map((state) => (
@@ -614,53 +618,67 @@ const SprintsPanel = ({ projectId, states, activities = [], onClose, onUpdate, o
                                 </div>
 
                                 <div className="col-span-2">
-                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                                        Assign Activities
-                                    </label>
+                                    <div className="flex items-center justify-between mb-2">
+                                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                                            Assign Activities
+                                        </label>
+                                        <div className="relative">
+                                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                            <input
+                                                type="text"
+                                                placeholder="Search activities..."
+                                                value={activitySearchTerm}
+                                                onChange={(e) => setActivitySearchTerm(e.target.value)}
+                                                className="pl-9 pr-3 py-1.5 text-sm border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 w-48 transition-all"
+                                            />
+                                        </div>
+                                    </div>
                                     <div className="border border-slate-200 dark:border-slate-600 rounded-lg max-h-48 overflow-y-auto bg-white dark:bg-slate-700 p-2">
                                         {availableActivities.length === 0 ? (
                                             <p className="text-sm text-slate-400 text-center py-2">No available activities</p>
                                         ) : (
-                                            availableActivities.map((activity) => (
-                                                <div key={activity.id} className="flex items-center gap-2 p-1.5 hover:bg-slate-50 dark:hover:bg-slate-600 rounded cursor-pointer">
-                                                    <input
-                                                        type="checkbox"
-                                                        id={`activity-${activity.id}`}
-                                                        checked={formData.activityIds.includes(activity.id)}
-                                                        onChange={(e) => {
-                                                            const ids = e.target.checked
-                                                                ? [...formData.activityIds, activity.id]
-                                                                : formData.activityIds.filter(id => id !== activity.id);
-                                                            setFormData({ ...formData, activityIds: ids });
-                                                        }}
-                                                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                                                    />
-                                                    <label htmlFor={`activity-${activity.id}`} className="flex-1 text-sm cursor-pointer select-none flex items-center justify-between">
-                                                        <span className="font-medium text-slate-700 dark:text-slate-200">{activity.titulo}</span>
-                                                        <div className="flex items-center gap-2">
-                                                            {activity.user && (
-                                                                <div className="flex items-center gap-1 text-[10px] text-slate-400 font-medium uppercase mr-2">
-                                                                    <User className="w-3 h-3" />
-                                                                    {activity.user.name}
-                                                                </div>
-                                                            )}
-                                                            <span className="text-xs px-2 py-0.5 rounded-full font-medium"
-                                                                style={{
-                                                                    backgroundColor: (states.find(s => s.id === activity.stateId)?.color || '#94a3b8') + '20',
-                                                                    color: states.find(s => s.id === activity.stateId)?.color || '#94a3b8'
-                                                                }}>
-                                                                {states.find(s => s.id === activity.stateId)?.nombre}
-                                                            </span>
-                                                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold uppercase ${activity.priority === 'high' ? 'bg-red-100 text-red-600' :
-                                                                activity.priority === 'medium' ? 'bg-amber-100 text-amber-600' :
-                                                                    'bg-emerald-100 text-emerald-600'
-                                                                }`}>
-                                                                {activity.priority}
-                                                            </span>
-                                                        </div>
-                                                    </label>
-                                                </div>
-                                            ))
+                                            availableActivities
+                                                .filter(activity => activity.titulo.toLowerCase().includes(activitySearchTerm.toLowerCase()))
+                                                .map((activity) => (
+                                                    <div key={activity.id} className="flex items-center gap-2 p-1.5 hover:bg-slate-50 dark:hover:bg-slate-600 rounded cursor-pointer">
+                                                        <input
+                                                            type="checkbox"
+                                                            id={`activity-${activity.id}`}
+                                                            checked={formData.activityIds.includes(activity.id)}
+                                                            onChange={(e) => {
+                                                                const ids = e.target.checked
+                                                                    ? [...formData.activityIds, activity.id]
+                                                                    : formData.activityIds.filter(id => id !== activity.id);
+                                                                setFormData({ ...formData, activityIds: ids });
+                                                            }}
+                                                            className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                                        />
+                                                        <label htmlFor={`activity-${activity.id}`} className="flex-1 text-sm cursor-pointer select-none flex items-center justify-between">
+                                                            <span className="font-medium text-slate-700 dark:text-slate-200">{activity.titulo}</span>
+                                                            <div className="flex items-center gap-2">
+                                                                {activity.user && (
+                                                                    <div className="flex items-center gap-1 text-[10px] text-slate-400 font-medium uppercase mr-2">
+                                                                        <User className="w-3 h-3" />
+                                                                        {activity.user.name}
+                                                                    </div>
+                                                                )}
+                                                                <span className="text-xs px-2 py-0.5 rounded-full font-medium"
+                                                                    style={{
+                                                                        backgroundColor: (states.find(s => s.id === activity.stateId)?.color || '#94a3b8') + '20',
+                                                                        color: states.find(s => s.id === activity.stateId)?.color || '#94a3b8'
+                                                                    }}>
+                                                                    {states.find(s => s.id === activity.stateId)?.nombre}
+                                                                </span>
+                                                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold uppercase ${activity.priority === 'high' ? 'bg-red-100 text-red-600' :
+                                                                    activity.priority === 'medium' ? 'bg-amber-100 text-amber-600' :
+                                                                        'bg-emerald-100 text-emerald-600'
+                                                                    }`}>
+                                                                    {activity.priority}
+                                                                </span>
+                                                            </div>
+                                                        </label>
+                                                    </div>
+                                                ))
                                         )}
                                     </div>
                                 </div>
@@ -672,7 +690,8 @@ const SprintsPanel = ({ projectId, states, activities = [], onClose, onUpdate, o
                                     onClick={() => {
                                         setShowForm(false);
                                         setEditingSprint(null);
-                                        setFormData({ nombre: '', fechaInicio: '', fechaFin: '', stateId: '', activityIds: [] });
+                                        setFormData({ nombre: '', fechaInicio: '', fechaFin: '', stateId: states.find(s => s.nombre === 'To Do')?.id || '', activityIds: [] });
+                                        setActivitySearchTerm('');
                                     }}
                                     className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-600 rounded-lg"
                                 >
@@ -714,7 +733,7 @@ const ProjectBoard = () => {
     const [formData, setFormData] = useState({
         titulo: '',
         descriptor: '',
-        priority: 'medium',
+        priority: 'low',
         dueDate: '',
         color: '#6366f1',
         userId: '',
@@ -762,7 +781,7 @@ const ProjectBoard = () => {
         setFormData({
             titulo: '',
             descriptor: '',
-            priority: 'medium',
+            priority: 'low',
             dueDate: '',
             color: '#6366f1',
             userId: '',
@@ -895,7 +914,7 @@ const ProjectBoard = () => {
                                 type="text"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                placeholder="Search activities by name..."
+                                placeholder="Search for activities, sprints, or users by name..."
                                 className="w-full pl-10 pr-4 py-2 bg-slate-100 dark:bg-slate-700/50 border-transparent focus:bg-white dark:focus:bg-slate-700 border focus:border-indigo-500 rounded-xl text-sm transition-all outline-none"
                             />
                         </div>
@@ -949,9 +968,15 @@ const ProjectBoard = () => {
                 >
                     <div className="flex gap-4 overflow-x-auto pb-4">
                         {states.map((state) => {
-                            const filteredActivities = (activitiesByState[state.id] || []).filter(activity =>
-                                activity.titulo.toLowerCase().includes(searchTerm.toLowerCase())
-                            );
+                            const filteredActivities = (activitiesByState[state.id] || []).filter(activity => {
+                                const term = searchTerm.toLowerCase();
+                                const sprintName = activity.sprintBacklogActivities?.[0]?.sprintBacklog?.nombre || '';
+                                const userName = activity.user?.name || '';
+
+                                return activity.titulo.toLowerCase().includes(term) ||
+                                    sprintName.toLowerCase().includes(term) ||
+                                    userName.toLowerCase().includes(term);
+                            });
                             return (
                                 <DroppableColumn
                                     key={state.id}

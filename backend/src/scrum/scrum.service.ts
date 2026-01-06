@@ -697,14 +697,83 @@ export class ScrumService implements OnModuleInit {
   }
 
   // Get project members
+  // Get project members
   async getProjectMembers(projectId: string, userId: string) {
     await this.verifyProjectAccess(projectId, userId);
 
-    return this.projectMemberRepository.find({
+    // 1. Get project details
+    const project = await this.projectRepository.findOne({
+      where: { id: projectId },
+      relations: ['version', 'version.application', 'version.application.user'],
+    });
+
+    if (!project) throw new NotFoundException('Project not found');
+
+    const versionId = project.versionId;
+    const applicationId = project.version.applicationId;
+    const ownerId = project.version.application.userId;
+
+    // 2. Get old-style ProjectMembers
+    const projectMembers = await this.projectMemberRepository.find({
       where: { projectId },
       relations: ['user'],
-      order: { joinedAt: 'ASC' },
     });
+
+    // 3. Get unified ScrumMembers
+    const scrumMembers = await this.scrumMemberRepository.find({
+      where: [
+        { resourceType: 'project', resourceId: projectId },
+        { resourceType: 'version', resourceId: versionId },
+        { resourceType: 'application', resourceId: applicationId },
+      ],
+      relations: ['user'],
+    });
+
+    // 4. Combine and deduplicate
+    const memberMap = new Map<string, any>();
+
+    // Add project members
+    projectMembers.forEach(m => {
+      if (m.user) {
+        memberMap.set(m.user.id, {
+          id: m.id, // prefer existing member ID if available
+          projectId,
+          userId: m.user.id,
+          role: m.role,
+          joinedAt: m.joinedAt,
+          user: m.user,
+        });
+      }
+    });
+
+    // Add scrum members
+    scrumMembers.forEach(m => {
+      if (m.user && !memberMap.has(m.user.id)) {
+        memberMap.set(m.user.id, {
+          id: m.id,
+          projectId, // technically this might be virtual if inherited
+          userId: m.user.id,
+          role: m.role,
+          joinedAt: m.joinedAt,
+          user: m.user,
+        });
+      }
+    });
+
+    // 5. Ensure the project owner (app creator) is included
+    if (!memberMap.has(ownerId) && project.version.application.user) {
+      const owner = project.version.application.user;
+      memberMap.set(owner.id, {
+        id: 'owner-' + owner.id,
+        projectId,
+        userId: owner.id,
+        role: 'owner',
+        joinedAt: project.createdAt,
+        user: owner,
+      });
+    }
+
+    return Array.from(memberMap.values());
   }
 
   // Get projects where user is a member (shared with me) - excludes projects user owns
@@ -726,20 +795,77 @@ export class ScrumService implements OnModuleInit {
   }
 
   // Get users available for task assignment (only project members)
+  // Get users available for task assignment (project members + higher level members)
   async getProjectUsers(projectId: string, userId: string) {
     await this.verifyProjectAccess(projectId, userId);
 
-    const members = await this.projectMemberRepository.find({
+    // 1. Get project details for hierarchy and to identify the owner
+    const project = await this.projectRepository.findOne({
+      where: { id: projectId },
+      relations: ['version', 'version.application', 'version.application.user'],
+    });
+
+    if (!project) throw new NotFoundException('Project not found');
+
+    const versionId = project.versionId;
+    const applicationId = project.version.applicationId;
+    const ownerId = project.version.application.userId;
+
+    // 2. Get old-style ProjectMembers
+    const projectMembers = await this.projectMemberRepository.find({
       where: { projectId },
       relations: ['user'],
     });
 
-    return members.map(m => ({
-      id: m.user.id,
-      name: m.user.name,
-      email: m.user.email,
-      role: m.role,
-    }));
+    // 3. Get unified ScrumMembers (Project, Version, or Application level)
+    const scrumMembers = await this.scrumMemberRepository.find({
+      where: [
+        { resourceType: 'project', resourceId: projectId },
+        { resourceType: 'version', resourceId: versionId },
+        { resourceType: 'application', resourceId: applicationId },
+      ],
+      relations: ['user'],
+    });
+
+    // 4. Combine and deduplicate
+    const userMap = new Map<string, any>();
+
+    // Add project members
+    projectMembers.forEach(m => {
+      if (m.user) {
+        userMap.set(m.user.id, {
+          id: m.user.id,
+          name: m.user.name,
+          email: m.user.email,
+          role: m.role,
+        });
+      }
+    });
+
+    // Add scrum members
+    scrumMembers.forEach(m => {
+      if (m.user && !userMap.has(m.user.id)) {
+        userMap.set(m.user.id, {
+          id: m.user.id,
+          name: m.user.name,
+          email: m.user.email,
+          role: m.role,
+        });
+      }
+    });
+
+    // 5. Ensure the project owner (app creator) is included
+    if (!userMap.has(ownerId) && project.version.application.user) {
+      const owner = project.version.application.user;
+      userMap.set(owner.id, {
+        id: owner.id,
+        name: owner.name,
+        email: owner.email,
+        role: 'owner',
+      });
+    }
+
+    return Array.from(userMap.values());
   }
 
   // Invite a user to project
@@ -874,21 +1000,71 @@ export class ScrumService implements OnModuleInit {
       throw new BadRequestException('Only project owner or admin can remove members');
     }
 
-    const targetMember = await this.projectMemberRepository.findOne({
+
+    // Check for assigned activities
+    const assignedActivities = await this.activityRepository.find({
       where: { projectId, userId: targetUserId },
+      select: ['titulo'],
+      take: 10
     });
 
-    if (!targetMember) {
-      throw new NotFoundException('Member not found');
+    if (assignedActivities.length > 0) {
+      throw new BadRequestException({
+        message: 'Cannot remove user. They are assigned to the following activities:',
+        assignedActivities: assignedActivities.map(a => a.titulo)
+      });
     }
 
-    if (targetMember.role === 'owner') {
-      throw new BadRequestException('Cannot remove project owner');
+    // Try removing from old repository first
+    const targetMember = await this.projectMemberRepository.findOne({
+      where: { projectId, userId: targetUserId },
+      relations: ['user'],
+    });
+
+    if (targetMember) {
+      if (targetMember.role === 'owner') {
+        throw new BadRequestException('Cannot remove project owner');
+      }
+      const userEmail = targetMember.user?.email;
+      await this.projectMemberRepository.remove(targetMember);
+
+      if (userEmail) {
+        try {
+          await this.projectInvitationRepository.delete({ projectId, email: userEmail });
+          await this.scrumInvitationRepository.delete({ resourceType: 'project', resourceId: projectId, email: userEmail });
+        } catch (e) {
+          console.error('Error cleaning up invitations:', e);
+        }
+      }
+      return { message: 'Member removed successfully' };
     }
 
-    await this.projectMemberRepository.remove(targetMember);
+    // Try removing from new unified repository
+    const scrumMember = await this.scrumMemberRepository.findOne({
+      where: {
+        resourceType: 'project',
+        resourceId: projectId,
+        userId: targetUserId
+      },
+      relations: ['user'],
+    });
 
-    return { message: 'Member removed successfully' };
+    if (scrumMember) {
+      const userEmail = scrumMember.user?.email;
+      await this.scrumMemberRepository.remove(scrumMember);
+
+      if (userEmail) {
+        try {
+          await this.scrumInvitationRepository.delete({ resourceType: 'project', resourceId: projectId, email: userEmail });
+          await this.projectInvitationRepository.delete({ projectId, email: userEmail });
+        } catch (e) {
+          console.error('Error cleaning up invitations:', e);
+        }
+      }
+      return { message: 'Member removed successfully' };
+    }
+
+    throw new NotFoundException('Member not found');
   }
 
   // Update member role
@@ -953,27 +1129,32 @@ export class ScrumService implements OnModuleInit {
     }
 
     // Check for pending invitation
-    const existingInvitation = await this.scrumInvitationRepository.findOne({
+    let invitation = await this.scrumInvitationRepository.findOne({
       where: { resourceType, resourceId, email: email.toLowerCase(), status: 'pending' },
     });
-    if (existingInvitation) {
-      throw new BadRequestException('An invitation is already pending for this email');
-    }
 
-    // Create invitation
-    const token = randomBytes(32).toString('hex');
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
+    const token = randomBytes(32).toString('hex');
 
-    const invitation = this.scrumInvitationRepository.create({
-      email: email.toLowerCase(),
-      resourceType,
-      resourceId,
-      resourceName,
-      token,
-      invitedById: userId,
-      expiresAt,
-    });
+    if (invitation) {
+      // Update existing invitation (Resend)
+      invitation.token = token;
+      invitation.expiresAt = expiresAt;
+      invitation.invitedById = userId;
+      // You might want to update resourceName if it changed, but usually fine.
+    } else {
+      // Create new
+      invitation = this.scrumInvitationRepository.create({
+        email: email.toLowerCase(),
+        resourceType,
+        resourceId,
+        resourceName,
+        token,
+        invitedById: userId,
+        expiresAt,
+      });
+    }
 
     await this.scrumInvitationRepository.save(invitation);
 

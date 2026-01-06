@@ -32,7 +32,7 @@ export class RoomsService {
     @InjectRepository(User)
     private userRepository: Repository<User>,
     private encryptionService: EncryptionService,
-  ) {}
+  ) { }
 
   async createRoom(ownerId: string, createRoomDto: CreateRoomDto) {
     const { name, description, isPublic = true, allowedEmails = [] } = createRoomDto;
@@ -175,7 +175,7 @@ export class RoomsService {
             // Use the sharedPassword from the SharedItem if available
             itemData = {
               id: passwordEntity.id,
-              name: passwordEntity.title, // Frontend expects 'name', entity has 'title'
+              title: passwordEntity.title, // Frontend expects 'name', entity has 'title'
               username: passwordEntity.username,
               url: passwordEntity.url,
               password: item.sharedPassword || '[Protected - Contact owner for access]',
@@ -457,7 +457,7 @@ export class RoomsService {
             // Transform password data for room sharing
             itemData = {
               id: passwordEntity.id,
-              name: passwordEntity.title,
+              title: passwordEntity.title,
               username: passwordEntity.username,
               url: passwordEntity.url,
               password: item.sharedPassword || '[Protected - Contact owner for access]',
@@ -489,7 +489,7 @@ export class RoomsService {
     const roomsWithData = await Promise.all(
       accessEntries.map(async (entry) => {
         const room = entry.room;
-        if (!room || !room.isActive) return null;
+        if (!room || !room.isActive || room.owner.email.toLowerCase() === userEmail.toLowerCase()) return null;
 
         const itemCount = await this.sharedItemRepository.count({
           where: { roomId: room.id },
@@ -526,11 +526,25 @@ export class RoomsService {
     const { userEmail, canCreate, canUpdate, canDelete, canShare, canViewPasswords } = dto;
 
     const room = await this.roomRepository.findOne({
-      where: { id: roomId, ownerId },
+      where: { id: roomId },
     });
 
     if (!room) {
-      throw new NotFoundException('Room not found or you do not own it');
+      throw new NotFoundException('Room not found');
+    }
+
+    // Check if user is owner or has share permission
+    if (room.ownerId !== ownerId) {
+      const user = await this.userRepository.findOne({ where: { id: ownerId } });
+      if (!user) throw new ForbiddenException('User not found');
+
+      const accessEntry = await this.accessListRepository.findOne({
+        where: { roomId, userEmail: user.email },
+      });
+
+      if (!accessEntry || !accessEntry.canShare) {
+        throw new ForbiddenException('You do not have permission to add users to this room');
+      }
     }
 
     const user = await this.userRepository.findOne({ where: { email: userEmail } });
@@ -561,13 +575,27 @@ export class RoomsService {
     return { message: 'User added to room successfully', userEmail };
   }
 
-  async removeUserFromRoom(ownerId: string, roomId: string, userEmail: string) {
+  async removeUserFromRoom(userId: string, roomId: string, userEmail: string) {
     const room = await this.roomRepository.findOne({
-      where: { id: roomId, ownerId },
+      where: { id: roomId },
     });
 
     if (!room) {
-      throw new NotFoundException('Room not found or you do not own it');
+      throw new NotFoundException('Room not found');
+    }
+
+    // Check permissions
+    if (room.ownerId !== userId) {
+      const user = await this.userRepository.findOne({ where: { id: userId } });
+      if (!user) throw new ForbiddenException('User not found');
+
+      const accessEntry = await this.accessListRepository.findOne({
+        where: { roomId, userEmail: user.email },
+      });
+
+      if (!accessEntry || !accessEntry.canShare) {
+        throw new ForbiddenException('You do not have permission to remove users from this room');
+      }
     }
 
     const accessEntry = await this.accessListRepository.findOne({
@@ -605,12 +633,27 @@ export class RoomsService {
   }
 
   async getRoomAccessList(ownerId: string, roomId: string) {
+
     const room = await this.roomRepository.findOne({
-      where: { id: roomId, ownerId },
+      where: { id: roomId },
     });
 
     if (!room) {
-      throw new NotFoundException('Room not found or you do not own it');
+      throw new NotFoundException('Room not found');
+    }
+
+    // Check if user is owner or has share permission
+    if (room.ownerId !== ownerId) {
+      const user = await this.userRepository.findOne({ where: { id: ownerId } });
+      if (!user) throw new ForbiddenException('User not found');
+
+      const accessEntry = await this.accessListRepository.findOne({
+        where: { roomId, userEmail: user.email },
+      });
+
+      if (!accessEntry || !accessEntry.canShare) {
+        throw new ForbiddenException('You do not have permission to view the access list for this room');
+      }
     }
 
     const accessEntries = await this.accessListRepository.find({
@@ -631,17 +674,31 @@ export class RoomsService {
   }
 
   async updateUserPermissions(
-    ownerId: string,
+    userId: string,
     roomId: string,
     userEmail: string,
     permissions: { canCreate?: boolean; canUpdate?: boolean; canDelete?: boolean; canShare?: boolean; canViewPasswords?: boolean },
   ) {
     const room = await this.roomRepository.findOne({
-      where: { id: roomId, ownerId },
+      where: { id: roomId },
     });
 
     if (!room) {
-      throw new NotFoundException('Room not found or you do not own it');
+      throw new NotFoundException('Room not found');
+    }
+
+    // Check permissions
+    if (room.ownerId !== userId) {
+      const user = await this.userRepository.findOne({ where: { id: userId } });
+      if (!user) throw new ForbiddenException('User not found');
+
+      const accessEntry = await this.accessListRepository.findOne({
+        where: { roomId, userEmail: user.email },
+      });
+
+      if (!accessEntry || !accessEntry.canShare) {
+        throw new ForbiddenException('You do not have permission to manage users in this room');
+      }
     }
 
     const accessEntry = await this.accessListRepository.findOne({
@@ -787,7 +844,7 @@ export class RoomsService {
 
     // Check if user is owner or has edit permission
     const isOwner = room.ownerId === userId;
-    
+
     if (!isOwner) {
       // Check access list for edit permission
       const access = await this.accessListRepository.findOne({

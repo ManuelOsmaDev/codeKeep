@@ -21,7 +21,7 @@ export class SnippetsService {
     private accessListRepository: Repository<RoomAccessList>,
     @InjectRepository(User) // Injected
     private userRepository: Repository<User>,
-  ) {}
+  ) { }
 
   async create(userId: string, createSnippetDto: CreateSnippetDto): Promise<Snippet> {
     const snippet = this.snippetRepository.create({
@@ -33,7 +33,7 @@ export class SnippetsService {
 
   async findAll(userId: string, filters: FilterSnippetDto): Promise<Snippet[]> {
     const queryBuilder = this.snippetRepository.createQueryBuilder('snippet');
-    
+
     queryBuilder.where('snippet.userId = :userId', { userId });
 
     if (filters.language && filters.language !== 'all') {
@@ -71,40 +71,40 @@ export class SnippetsService {
   async update(id: string, userId: string, updateSnippetDto: UpdateSnippetDto): Promise<Snippet> {
     let snippet = await this.snippetRepository.findOne({ where: { id } });
     if (!snippet) {
-        throw new NotFoundException('Snippet not found');
+      throw new NotFoundException('Snippet not found');
     }
 
     if (snippet.userId !== userId) {
-        // Check if shared via room with write permission
-        const user = await this.userRepository.findOne({ where: { id: userId } });
-        if (!user) throw new ForbiddenException('User not found');
+      // Check if shared via room with write permission
+      const user = await this.userRepository.findOne({ where: { id: userId } });
+      if (!user) throw new ForbiddenException('User not found');
 
-        // Find rooms where this snippet is shared
-        const sharedItems = await this.sharedItemRepository.find({
-            where: { itemId: id, itemType: 'snippet' },
+      // Find rooms where this snippet is shared
+      const sharedItems = await this.sharedItemRepository.find({
+        where: { itemId: id, itemType: 'snippet' },
+        relations: ['room'],
+      });
+
+      let hasPermission = false;
+      for (const item of sharedItems) {
+        // Check if user is the owner of the room
+        if (item.room && item.room.ownerId === userId) {
+          hasPermission = true;
+          break;
+        }
+
+        const accessEntry = await this.accessListRepository.findOne({
+          where: { roomId: item.roomId, userEmail: user.email },
         });
-
-        let hasPermission = false;
-        for (const item of sharedItems) {
-            const accessEntry = await this.accessListRepository.findOne({
-                where: { roomId: item.roomId, userEmail: user.email },
-            });
-            if (accessEntry && accessEntry.canUpdate) {
-                hasPermission = true;
-                break;
-            }
-            // Also check if user is owner of the room (implicit permission)
-            // But room owner is not necessarily snippet owner. 
-            // If I share YOUR snippet in MY room, can I edit it? 
-            // Usually only if I have edit permission on the snippet itself.
-            // But here we are defining room permissions. 
-            // If snippet is in a room, and I have edit permission on the ROOM, can I edit the snippet?
-            // Yes, that's the requirement.
+        if (accessEntry && accessEntry.canUpdate) {
+          hasPermission = true;
+          break;
         }
+      }
 
-        if (!hasPermission) {
-             throw new ForbiddenException('You do not have permission to update this snippet');
-        }
+      if (!hasPermission) {
+        throw new ForbiddenException('You do not have permission to update this snippet');
+      }
     }
 
     Object.assign(snippet, updateSnippetDto);
