@@ -5,7 +5,7 @@ import roomsApi from '../../../services/rooms';
 import { snippets as snippetsApi, passwords as passwordsApi } from '../../../services/api';
 
 const ManageRoomModal = ({ isOpen, onClose, room, userPermissions, initialTab }) => {
-    const [activeTab, setActiveTab] = useState(initialTab || 'current'); // 'current', 'add', or 'access'
+    const [activeTab, setActiveTab] = useState(initialTab || 'add'); // 'add' or 'access'
     const [roomItems, setRoomItems] = useState([]);
     const [availableSnippets, setAvailableSnippets] = useState([]);
     const [availablePasswords, setAvailablePasswords] = useState([]);
@@ -304,15 +304,7 @@ const ManageRoomModal = ({ isOpen, onClose, room, userPermissions, initialTab })
 
                 {/* Tabs */}
                 < div className="flex border-b border-slate-200 dark:border-slate-700" >
-                    <button
-                        onClick={() => setActiveTab('current')}
-                        className={`flex-1 py-3 text-sm font-medium transition-colors border-b-2 ${activeTab === 'current'
-                            ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
-                            : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
-                            }`}
-                    >
-                        Items ({roomItems.length})
-                    </button>
+
                     {
                         canCreate && (
                             <button
@@ -337,7 +329,7 @@ const ManageRoomModal = ({ isOpen, onClose, room, userPermissions, initialTab })
                             >
                                 <div className="flex items-center justify-center gap-1">
                                     <Users className="w-4 h-4" />
-                                    Access ({accessList.length})
+                                    Admin ({accessList.length})
                                 </div>
                             </button>
                         )
@@ -350,54 +342,7 @@ const ManageRoomModal = ({ isOpen, onClose, room, userPermissions, initialTab })
                         <div className="flex justify-center py-8">
                             <div className="animate-spin rounded-full h-8 w-8 border-2 border-indigo-600 border-t-transparent"></div>
                         </div>
-                    ) : activeTab === 'current' ? (
-                        <div className="space-y-2">
-                            {roomItems.length === 0 ? (
-                                <div className="text-center py-8 text-slate-500 dark:text-slate-400">
-                                    <p>This room is empty.</p>
-                                    {canCreate && (
-                                        <button
-                                            onClick={() => setActiveTab('add')}
-                                            className="text-indigo-600 dark:text-indigo-400 hover:underline mt-2 text-sm"
-                                        >
-                                            Add your first item
-                                        </button>
-                                    )}
-                                </div>
-                            ) : (
-                                roomItems.map((item) => (
-                                    <div key={item.id} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg border border-slate-200 dark:border-slate-600">
-                                        <div className="flex items-center gap-3">
-                                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${item.itemType === 'snippet'
-                                                ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
-                                                : 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400'
-                                                }`}>
-                                                {item.itemType === 'snippet' ? <Code2 className="w-4 h-4" /> : <Key className="w-4 h-4" />}
-                                            </div>
-                                            <div>
-                                                <p className="font-medium text-slate-900 dark:text-white">
-                                                    {item.itemData?.title || item.itemData?.name || 'Unknown Item'}
-                                                </p>
-                                                <p className="text-xs text-slate-500 dark:text-slate-400 capitalize">
-                                                    {item.itemType}
-                                                </p>
-                                            </div>
-                                        </div>
-                                        <div className="flex gap-2">
-                                            {canDelete && (
-                                                <button
-                                                    onClick={() => handleRemoveItem(item.id)}
-                                                    className="p-2 text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                                                    title="Remove from room"
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
-                                ))
-                            )}
-                        </div>
+
                     ) : activeTab === 'add' ? (
                         <div className="space-y-4">
                             <div className="relative">
@@ -549,7 +494,7 @@ const ManageRoomModal = ({ isOpen, onClose, room, userPermissions, initialTab })
                                                             {access.canCreate && <span className="text-[10px] bg-green-50 text-green-600 px-2 py-0.5 rounded font-medium border border-green-100">Create</span>}
                                                             {access.canUpdate && <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded font-medium border border-blue-100">Edit</span>}
                                                             {access.canDelete && <span className="text-[10px] bg-red-50 text-red-600 px-2 py-0.5 rounded font-medium border border-red-100">Delete</span>}
-                                                            {access.canShare && <span className="text-[10px] bg-purple-50 text-purple-600 px-2 py-0.5 rounded font-medium border border-purple-100">Share</span>}
+                                                            {access.canShare && <span className="text-[10px] bg-purple-50 text-purple-600 px-2 py-0.5 rounded font-medium border border-purple-100">Admin</span>}
                                                             {access.canViewPasswords && <span className="text-[10px] bg-amber-50 text-amber-600 px-2 py-0.5 rounded font-medium border border-amber-100">View Passwords</span>}
                                                             {!access.canCreate && !access.canUpdate && !access.canDelete && !access.canShare && !access.canViewPasswords && <span className="text-[10px] bg-slate-50 text-slate-500 px-2 py-0.5 rounded border border-slate-100">View Only</span>}
                                                         </div>
@@ -760,7 +705,7 @@ const ManageRoomModal = ({ isOpen, onClose, room, userPermissions, initialTab })
 
                             <label className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
                                 <div>
-                                    <span className="font-medium text-slate-900 dark:text-white">Share</span>
+                                    <span className="font-medium text-slate-900 dark:text-white">Admin</span>
                                     <p className="text-xs text-slate-500 dark:text-slate-400">Can manage access list</p>
                                 </div>
                                 <input

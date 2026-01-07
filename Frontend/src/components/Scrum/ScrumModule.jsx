@@ -14,6 +14,7 @@ import {
 import { toast } from 'react-hot-toast';
 import scrumApi from '../../services/scrumModule';
 import PendingInvitations from './PendingInvitations';
+import ConfirmModal from '../CodeKeep/modals/ConfirmModal';
 import { Users, ExternalLink } from 'lucide-react';
 
 const ScrumModule = () => {
@@ -24,6 +25,14 @@ const ScrumModule = () => {
     const [editingApp, setEditingApp] = useState(null);
     const [formData, setFormData] = useState({ nombre: '', descripcion: '' });
     const [sharedResources, setSharedResources] = useState({ sharedApps: [], sharedVersions: [], sharedProjects: [] });
+
+    // Confirm modal state
+    const [confirmModal, setConfirmModal] = useState({
+        isOpen: false,
+        title: '',
+        message: '',
+        onConfirm: () => { }
+    });
 
     useEffect(() => {
         fetchApplications();
@@ -78,16 +87,22 @@ const ScrumModule = () => {
         }
     };
 
-    const handleDelete = async (id, e) => {
+    const handleDelete = (id, e) => {
         e.stopPropagation();
-        if (!confirm('¿Estás seguro de eliminar esta aplicación?')) return;
-        try {
-            await scrumApi.deleteApplication(id);
-            toast.success('Aplicación eliminada');
-            fetchApplications();
-        } catch (error) {
-            toast.error('Error al eliminar aplicación');
-        }
+        setConfirmModal({
+            isOpen: true,
+            title: 'Eliminar Aplicación',
+            message: '¿Estás seguro de eliminar esta aplicación? Todos los proyectos y versiones asociados serán eliminados.',
+            onConfirm: async () => {
+                try {
+                    await scrumApi.deleteApplication(id);
+                    toast.success('Aplicación eliminada');
+                    fetchApplications();
+                } catch (error) {
+                    toast.error('Error al eliminar aplicación');
+                }
+            }
+        });
     };
 
     const handleEdit = (app, e) => {
@@ -388,6 +403,17 @@ const ScrumModule = () => {
                     </div>
                 </div>
             )}
+
+            <ConfirmModal
+                isOpen={confirmModal.isOpen}
+                onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+                onConfirm={confirmModal.onConfirm}
+                title={confirmModal.title}
+                message={confirmModal.message}
+                type="danger"
+                confirmText="Eliminar"
+                cancelText="Cancelar"
+            />
         </div>
     );
 };

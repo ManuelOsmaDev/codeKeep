@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Folder, Code2, Key, Calendar, Eye, EyeOff, Copy, Check, AlertCircle, Shield, Plus, Share2, ArrowLeft, Lock, Edit2, Trash2 } from 'lucide-react';
+import { Folder, Code2, Key, Calendar, Eye, EyeOff, Copy, Check, AlertCircle, Shield, Plus, Users, ArrowLeft, Lock, Edit2, Trash2, Search, LayoutGrid, List as ListIcon } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import roomsApi from '../../../services/rooms';
 import { highlightCode } from '../utils/codeHighlight';
@@ -35,6 +35,8 @@ const SharedRoomView = () => {
     const [editPasswordModal, setEditPasswordModal] = useState({ isOpen: false, itemId: null, passwordName: '', currentPassword: '' });
     const [newPasswordValue, setNewPasswordValue] = useState('');
     const [initialModalTab, setInitialModalTab] = useState('current');
+    const [searchTerm, setSearchTerm] = useState('');
+    const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list'
 
     useEffect(() => {
         if (token) {
@@ -162,8 +164,15 @@ const SharedRoomView = () => {
     if (!room) return null;
 
     const permissions = room.currentUserPermissions || { canCreate: false, canUpdate: false, canDelete: false, canShare: false };
-    const snippets = room.items.filter(item => item.itemType === 'snippet' && item.itemData);
-    const passwords = room.items.filter(item => item.itemType === 'password' && item.itemData);
+
+    const filteredItems = room.items.filter(item => {
+        if (!searchTerm) return true;
+        const title = item.itemData?.title || item.itemData?.name || '';
+        return title.toLowerCase().includes(searchTerm.toLowerCase());
+    });
+
+    const snippets = filteredItems.filter(item => item.itemType === 'snippet' && item.itemData);
+    const passwords = filteredItems.filter(item => item.itemType === 'password' && item.itemData);
 
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-sans pb-20">
@@ -197,8 +206,8 @@ const SharedRoomView = () => {
                                 }}
                                 className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 rounded-lg text-sm font-medium transition-colors"
                             >
-                                <Share2 className="w-4 h-4" />
-                                Share
+                                <Users className="w-4 h-4" />
+                                Admin
                             </button>
                         )}
 
@@ -256,6 +265,37 @@ const SharedRoomView = () => {
             </div>
 
             <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-10">
+                {/* Search Filter & View Toggle */}
+                {(snippets.length > 0 || passwords.length > 0 || searchTerm) && (
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="relative flex-1 max-w-md">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                            <input
+                                type="text"
+                                placeholder="Buscar en esta sala..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all shadow-sm"
+                            />
+                        </div>
+                        <div className="flex bg-white dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm self-start md:self-auto">
+                            <button
+                                onClick={() => setViewMode('grid')}
+                                className={`p-2 rounded-lg transition-all ${viewMode === 'grid' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400' : 'text-slate-400 hover:text-slate-600'}`}
+                                title="Grid View"
+                            >
+                                <LayoutGrid className="w-5 h-5" />
+                            </button>
+                            <button
+                                onClick={() => setViewMode('list')}
+                                className={`p-2 rounded-lg transition-all ${viewMode === 'list' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400' : 'text-slate-400 hover:text-slate-600'}`}
+                                title="List View"
+                            >
+                                <ListIcon className="w-5 h-5" />
+                            </button>
+                        </div>
+                    </div>
+                )}
                 {/* Empty State */}
                 {snippets.length === 0 && passwords.length === 0 && (
                     <div className="text-center py-16 bg-white dark:bg-slate-800 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700">
@@ -290,22 +330,50 @@ const SharedRoomView = () => {
                             </span>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {snippets.map(({ itemData: snippet, id: itemId }) => (
-                                <SnippetCard
-                                    key={itemId}
-                                    snippet={snippet}
-                                    canEdit={permissions.isOwner || permissions.canUpdate}
-                                    canDelete={permissions.canDelete}
-                                    onEdit={() => setEditingSnippet(snippet)}
-                                    onDelete={() => handleRemoveItem(itemId, 'snippet')}
-                                    onCopy={() => copyToClipboard(snippet.code, snippet.id)}
-                                    isFavorite={false}
-                                    isBookmarked={false}
-                                    onToggleFavorite={() => { }}
-                                    onToggleBookmark={() => { }}
-                                    compact={true}
-                                />
+                        <div className={viewMode === 'grid' ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" : "space-y-3"}>
+                            {snippets.map(({ itemData: snippet, id: itemId, addedBy, addedAt }) => (
+                                viewMode === 'grid' ? (
+                                    <SnippetCard
+                                        key={itemId}
+                                        snippet={snippet}
+                                        canEdit={permissions.isOwner || permissions.canUpdate}
+                                        canDelete={permissions.canDelete}
+                                        onEdit={() => setEditingSnippet(snippet)}
+                                        onDelete={() => handleRemoveItem(itemId, 'snippet')}
+                                        onCopy={() => copyToClipboard(snippet.code, snippet.id)}
+                                        isFavorite={false}
+                                        onToggleFavorite={() => { }}
+                                        compact={true}
+                                        showAddToRoom={false}
+                                        addedBy={addedBy}
+                                        addedAt={addedAt}
+                                    />
+                                ) : (
+                                    <div key={itemId} className="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-between hover:border-indigo-300 dark:hover:border-indigo-600 transition-all group">
+                                        <div className="flex items-center gap-4">
+                                            <div className="p-2.5 bg-blue-100 dark:bg-blue-900/30 rounded-lg text-blue-600 dark:text-blue-400">
+                                                <Code2 className="w-5 h-5" />
+                                            </div>
+                                            <div>
+                                                <h3 className="font-bold text-slate-900 dark:text-white leading-none">
+                                                    {snippet.title}
+                                                </h3>
+                                                <span className="text-xs text-slate-500 dark:text-slate-400">Snippet</span>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            {permissions.canDelete && (
+                                                <button
+                                                    onClick={() => handleRemoveItem(itemId, 'snippet')}
+                                                    className="p-2 text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                                    title="Remove from room"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                )
                             ))}
                         </div>
                     </section>
@@ -326,99 +394,129 @@ const SharedRoomView = () => {
                             </span>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                            {passwords.map(({ itemData: password, id }) => (
-                                <div key={id} className="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-all group">
-                                    <div className="flex items-start justify-between mb-4">
-                                        <div className="w-12 h-12 bg-amber-100 dark:bg-amber-900/30 rounded-xl flex items-center justify-center text-amber-600 dark:text-amber-400 mb-2">
-                                            <Shield className="w-6 h-6" />
+                        <div className={viewMode === 'grid' ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5" : "space-y-3"}>
+                            {passwords.map(({ itemData: password, id, addedBy, addedAt }) => (
+                                viewMode === 'grid' ? (
+                                    <div key={id} className="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-all group">
+                                        <div className="flex items-start justify-between mb-4">
+                                            <div className="w-12 h-12 bg-amber-100 dark:bg-amber-900/30 rounded-xl flex items-center justify-center text-amber-600 dark:text-amber-400 mb-2">
+                                                <Shield className="w-6 h-6" />
+                                            </div>
+                                            <div className="px-2 py-1 bg-slate-100 dark:bg-slate-700 rounded text-xs font-mono text-slate-500 dark:text-slate-400">
+                                                Password
+                                            </div>
                                         </div>
-                                        <div className="px-2 py-1 bg-slate-100 dark:bg-slate-700 rounded text-xs font-mono text-slate-500 dark:text-slate-400">
-                                            Password
-                                        </div>
-                                    </div>
 
-                                    <h3 className="font-bold text-lg text-slate-900 dark:text-white mb-1 truncate">
-                                        {password.title || password.name}
-                                    </h3>
-                                    <p className="text-sm text-slate-500 dark:text-slate-400 mb-4 truncate">
-                                        {password.username}
-                                    </p>
-
-                                    <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-3 border border-slate-100 dark:border-slate-700/50 flex items-center justify-between mb-4">
-                                        <div className="font-mono text-sm text-slate-600 dark:text-slate-300 truncate mr-2">
-                                            {isPasswordProtected(password.password) ? (
-                                                <span className="text-amber-600 dark:text-amber-400 italic text-xs">
-                                                    🔒 Contact owner to re-share
-                                                </span>
-                                            ) : (
-                                                showPasswords ? password.password : '••••••••••••••••'
-                                            )}
-                                        </div>
-                                        {!isPasswordProtected(password.password) && (
+                                        <h3 className="font-bold text-lg text-slate-900 dark:text-white mb-1 truncate">
+                                            {password.title || password.name}
+                                        </h3>
+                                        <div className="flex items-center justify-between mb-4">
+                                            <p className="text-sm text-slate-500 dark:text-slate-400 truncate">
+                                                {password.username}
+                                            </p>
                                             <button
-                                                onClick={() => copyToClipboard(password.password, `pass-${id}`)}
-                                                className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded transition-colors"
-                                                title="Copy Password"
+                                                onClick={() => copyToClipboard(password.username, `user-${id}`)}
+                                                className="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 flex items-center gap-1 transition-colors"
+                                                title="Copy Username"
                                             >
-                                                {copiedId === `pass-${id}` ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+                                                {copiedId === `user-${id}` ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+                                                <span>{copiedId === `user-${id}` ? 'Copied' : 'Copy User'}</span>
                                             </button>
-                                        )}
-                                    </div>
+                                        </div>
 
-                                    <div className="pt-3 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between">
-                                        <span className="text-xs text-slate-400 dark:text-slate-500">
-                                            {isPasswordProtected(password.password) ? 'Needs re-share' : 'Securely shared'}
-                                        </span>
-                                        <div className="flex items-center gap-2">
-                                            {canEditPassword() && (
+                                        <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-3 border border-slate-100 dark:border-slate-700/50 flex items-center justify-between mb-4">
+                                            <div className="font-mono text-sm text-slate-600 dark:text-slate-300 truncate mr-2">
+                                                {isPasswordProtected(password.password) ? (
+                                                    <span className="text-amber-600 dark:text-amber-400 italic text-xs">
+                                                        🔒 Contact owner to re-share
+                                                    </span>
+                                                ) : (
+                                                    showPasswords ? password.password : '••••••••••••••••'
+                                                )}
+                                            </div>
+                                            {!isPasswordProtected(password.password) && (
                                                 <button
-                                                    onClick={() => {
-                                                        setEditPasswordModal({
-                                                            isOpen: true,
-                                                            itemId: id,
-                                                            passwordName: password.title || password.name,
-                                                            currentPassword: password.password
-                                                        });
-                                                        setNewPasswordValue(isPasswordProtected(password.password) ? '' : password.password);
-                                                    }}
-                                                    className="text-sm font-medium text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 flex items-center gap-1"
-                                                    title="Editar Password"
+                                                    onClick={() => copyToClipboard(password.password, `pass-${id}`)}
+                                                    className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded transition-colors"
+                                                    title="Copy Password"
                                                 >
-                                                    <Edit2 className="w-3 h-3" />
-                                                    Editar
+                                                    {copiedId === `pass-${id}` ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
                                                 </button>
                                             )}
+                                        </div>
+
+                                        <div className="pt-3 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between">
+                                            <div>
+                                                {canEditPassword() && (
+                                                    <button
+                                                        onClick={() => {
+                                                            setEditPasswordModal({
+                                                                isOpen: true,
+                                                                itemId: id,
+                                                                passwordName: password.title || password.name,
+                                                                currentPassword: password.password
+                                                            });
+                                                            setNewPasswordValue(isPasswordProtected(password.password) ? '' : password.password);
+                                                        }}
+                                                        className="text-sm font-medium text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 flex items-center gap-1"
+                                                        title="Editar Password"
+                                                    >
+                                                        <Edit2 className="w-3 h-3" />
+                                                        Editar
+                                                    </button>
+                                                )}
+                                            </div>
+
+                                            <div>
+                                                {permissions.canDelete && (
+                                                    <button
+                                                        onClick={() => handleRemoveItem(id, 'password')}
+                                                        className="p-1.5 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-lg transition-colors"
+                                                        title="Remove from room"
+                                                    >
+                                                        <Trash2 className="w-3.5 h-3.5" />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                        {addedBy && (
+                                            <div className="mt-4 pt-3 border-t border-slate-50 flex items-center justify-between text-[10px] text-slate-400">
+                                                <div className="flex items-center gap-1.5 truncate">
+                                                    <span className="font-medium">Agregado por:</span>
+                                                    <span className="truncate text-amber-600 font-semibold">{addedBy.name || addedBy.email}</span>
+                                                </div>
+                                                {addedAt && (
+                                                    <span className="flex-shrink-0">{new Date(addedAt).toLocaleDateString()}</span>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div key={id} className="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700 shadow-sm flex items-center justify-between hover:border-indigo-300 dark:hover:border-indigo-600 transition-all group">
+                                        <div className="flex items-center gap-4">
+                                            <div className="p-2.5 bg-amber-100 dark:bg-amber-900/30 rounded-lg text-amber-600 dark:text-amber-400">
+                                                <Key className="w-5 h-5" />
+                                            </div>
+                                            <div>
+                                                <h3 className="font-bold text-slate-900 dark:text-white leading-none">
+                                                    {password.title || password.name}
+                                                </h3>
+                                                <span className="text-xs text-slate-500 dark:text-slate-400">Password</span>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2">
                                             {permissions.canDelete && (
                                                 <button
                                                     onClick={() => handleRemoveItem(id, 'password')}
-                                                    className="p-1.5 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-lg transition-colors"
+                                                    className="p-2 text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
                                                     title="Remove from room"
                                                 >
-                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                    <Trash2 className="w-4 h-4" />
                                                 </button>
                                             )}
-                                            <button
-                                                onClick={() => {
-                                                    copyToClipboard(password.username, `user-${id}`);
-                                                }}
-                                                className="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 flex items-center gap-1"
-                                            >
-                                                {copiedId === `user-${id}` ? (
-                                                    <>
-                                                        <Check className="w-3 h-3" />
-                                                        Copied
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <Copy className="w-3 h-3" />
-                                                        Copy User
-                                                    </>
-                                                )}
-                                            </button>
                                         </div>
                                     </div>
-                                </div>
+                                )
                             ))}
                         </div>
                     </section>
@@ -436,14 +534,16 @@ const SharedRoomView = () => {
                 initialTab={initialModalTab}
             />
 
-            {editingSnippet && (
-                <EditSnippetModal
-                    isOpen={true}
-                    onClose={() => setEditingSnippet(null)}
-                    onSave={(data) => handleUpdateSnippet(editingSnippet.id, data)}
-                    snippet={editingSnippet}
-                />
-            )}
+            {
+                editingSnippet && (
+                    <EditSnippetModal
+                        isOpen={true}
+                        onClose={() => setEditingSnippet(null)}
+                        onSave={(data) => handleUpdateSnippet(editingSnippet.id, data)}
+                        snippet={editingSnippet}
+                    />
+                )
+            }
 
             <ConfirmModal
                 isOpen={confirmModal.isOpen}
@@ -456,60 +556,62 @@ const SharedRoomView = () => {
             />
 
             {/* Edit Password Modal */}
-            {editPasswordModal.isOpen && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-6 z-50" onClick={() => setEditPasswordModal({ isOpen: false, itemId: null, passwordName: '', currentPassword: '' })}>
-                    <div className="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-md border border-slate-200 dark:border-slate-700 shadow-xl" onClick={(e) => e.stopPropagation()}>
-                        <div className="p-6 border-b border-slate-200 dark:border-slate-700">
-                            <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                                <Edit2 className="w-5 h-5 text-amber-500" />
-                                Editar Password
-                            </h3>
-                            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                                Update the password for "{editPasswordModal.passwordName}"
-                            </p>
-                        </div>
+            {
+                editPasswordModal.isOpen && (
+                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-6 z-50" onClick={() => setEditPasswordModal({ isOpen: false, itemId: null, passwordName: '', currentPassword: '' })}>
+                        <div className="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-md border border-slate-200 dark:border-slate-700 shadow-xl" onClick={(e) => e.stopPropagation()}>
+                            <div className="p-6 border-b border-slate-200 dark:border-slate-700">
+                                <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                                    <Edit2 className="w-5 h-5 text-amber-500" />
+                                    Editar Password
+                                </h3>
+                                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                                    Update the password for "{editPasswordModal.passwordName}"
+                                </p>
+                            </div>
 
-                        <div className="p-6">
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                                New Password
-                            </label>
-                            <input
-                                type="text"
-                                value={newPasswordValue}
-                                onChange={(e) => setNewPasswordValue(e.target.value)}
-                                placeholder="Enter new password"
-                                className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-slate-900 dark:text-white font-mono"
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                        handleUpdatePassword();
-                                    }
-                                }}
-                                autoFocus
-                            />
-                        </div>
+                            <div className="p-6">
+                                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                                    New Password
+                                </label>
+                                <input
+                                    type="text"
+                                    value={newPasswordValue}
+                                    onChange={(e) => setNewPasswordValue(e.target.value)}
+                                    placeholder="Enter new password"
+                                    className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-slate-900 dark:text-white font-mono"
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            handleUpdatePassword();
+                                        }
+                                    }}
+                                    autoFocus
+                                />
+                            </div>
 
-                        <div className="p-4 border-t border-slate-200 dark:border-slate-700 flex gap-2 justify-end">
-                            <button
-                                onClick={() => {
-                                    setEditPasswordModal({ isOpen: false, itemId: null, passwordName: '', currentPassword: '' });
-                                    setNewPasswordValue('');
-                                }}
-                                className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors font-medium"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleUpdatePassword}
-                                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors font-medium flex items-center gap-2"
-                            >
-                                <Check className="w-4 h-4" />
-                                Save
-                            </button>
+                            <div className="p-4 border-t border-slate-200 dark:border-slate-700 flex gap-2 justify-end">
+                                <button
+                                    onClick={() => {
+                                        setEditPasswordModal({ isOpen: false, itemId: null, passwordName: '', currentPassword: '' });
+                                        setNewPasswordValue('');
+                                    }}
+                                    className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors font-medium"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleUpdatePassword}
+                                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors font-medium flex items-center gap-2"
+                                >
+                                    <Check className="w-4 h-4" />
+                                    Save
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+        </div >
     );
 };
 

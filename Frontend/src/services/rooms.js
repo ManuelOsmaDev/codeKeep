@@ -36,8 +36,12 @@ const roomsApi = {
         const payload = {
             itemType,
             itemId,
-            permissions,
         };
+
+        if (permissions && Array.isArray(permissions) && permissions.length > 0) {
+            payload.permissions = permissions;
+        }
+
         // Include masterPassword only for password items
         if (itemType === 'password' && masterPassword) {
             payload.masterPassword = masterPassword;

@@ -100,7 +100,7 @@ export class RoomsService {
   async getRoomByToken(token: string, userEmail?: string) {
     const room = await this.roomRepository.findOne({
       where: { shareToken: token, isActive: true },
-      relations: ['items', 'owner'],
+      relations: ['items', 'items.addedBy', 'owner'],
     });
 
     if (!room) {
@@ -190,6 +190,10 @@ export class RoomsService {
           itemType: item.itemType,
           itemData,
           addedAt: item.addedAt,
+          addedBy: item.addedBy ? {
+            name: item.addedBy.name,
+            email: item.addedBy.email,
+          } : null,
         };
       }),
     );
@@ -295,6 +299,7 @@ export class RoomsService {
           itemType: itemType as 'snippet' | 'password',
           itemId,
           sharedPassword: decryptedData.password, // Store the actual password
+          addedById: userId,
         });
 
         await this.sharedItemRepository.save(sharedItem);
@@ -332,6 +337,7 @@ export class RoomsService {
       roomId,
       itemType: itemType as 'snippet' | 'password',
       itemId,
+      addedById: userId,
     });
 
     await this.sharedItemRepository.save(sharedItem);
@@ -408,7 +414,7 @@ export class RoomsService {
   async getRoomItems(userId: string, roomId: string) {
     const room = await this.roomRepository.findOne({
       where: { id: roomId },
-      relations: ['items'],
+      relations: ['items', 'items.addedBy'],
     });
 
     if (!room) {
@@ -473,6 +479,10 @@ export class RoomsService {
           itemId: item.itemId,
           itemData,
           addedAt: item.addedAt,
+          addedBy: item.addedBy ? {
+            name: item.addedBy.name,
+            email: item.addedBy.email,
+          } : null,
         };
       }),
     );

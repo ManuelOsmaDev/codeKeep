@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, LogOut } from 'lucide-react';
 import { Toaster, toast } from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
-import { snippets as snippetsAPI, favorites as favoritesAPI, bookmarks as bookmarksAPI, users } from '../services/api';
+import { snippets as snippetsAPI, favorites as favoritesAPI, users } from '../services/api';
 
 // Components
 import Sidebar from './CodeKeep/ui/Sidebar';
@@ -46,7 +46,6 @@ const CodeKeep = () => {
   const [currentView, setCurrentView] = useState('all');
   const [showUserProfile, setShowUserProfile] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [bookmarks, setBookmarks] = useState(new Set());
   const [loading, setLoading] = useState(true);
 
   // Confirm Modal State
@@ -71,9 +70,6 @@ const CodeKeep = () => {
 
       const favResponse = await favoritesAPI.getAll();
       setFavorites(new Set(favResponse.data.map(f => f.id)));
-
-      const bookmarkResponse = await bookmarksAPI.getAll();
-      setBookmarks(new Set(bookmarkResponse.data.map(b => b.id)));
     } catch (error) {
       toast.error('Failed to load data');
     } finally {
@@ -141,23 +137,7 @@ const CodeKeep = () => {
     }
   };
 
-  const handleToggleBookmark = async (id) => {
-    try {
-      if (bookmarks.has(id)) {
-        await bookmarksAPI.remove(id);
-        setBookmarks(prev => {
-          const newBookmarks = new Set(prev);
-          newBookmarks.delete(id);
-          return newBookmarks;
-        });
-      } else {
-        await bookmarksAPI.add(id);
-        setBookmarks(prev => new Set([...prev, id]));
-      }
-    } catch (error) {
-      toast.error('Failed to update bookmark');
-    }
-  };
+
 
   const handleSaveSettings = async (updatedUser) => {
     try {
@@ -222,8 +202,6 @@ const CodeKeep = () => {
     let matchesView = true;
     if (currentView === 'favorites') {
       matchesView = favorites.has(snippet.id);
-    } else if (currentView === 'bookmarks') {
-      matchesView = bookmarks.has(snippet.id);
     }
 
     return matchesSearch && matchesLanguage && matchesTags && matchesView;
@@ -260,7 +238,6 @@ const CodeKeep = () => {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         favorites={favorites}
-        bookmarks={bookmarks}
         languagesExpanded={languagesExpanded}
         setLanguagesExpanded={setLanguagesExpanded}
         tagsExpanded={tagsExpanded}
@@ -287,15 +264,16 @@ const CodeKeep = () => {
           setShowUserProfile={setShowUserProfile}
           setShowSettings={setShowSettings}
           onLogout={logout}
+          activeTab={activeTab}
         />
 
         <main className="flex-1 overflow-y-auto p-6">
           {activeTab === 'drive' ? (
             <DriveView />
           ) : activeTab === 'passwords' ? (
-            <PasswordManager />
+            <PasswordManager searchTerm={searchTerm} />
           ) : activeTab === 'rooms' ? (
-            <RoomsView />
+            <RoomsView searchTerm={searchTerm} />
           ) : activeTab === 'admin' ? (
             <AdminPanel />
           ) : (
@@ -303,8 +281,7 @@ const CodeKeep = () => {
               <div className="flex justify-between items-center mb-6">
                 <div>
                   <h2 className="text-2xl font-bold">
-                    {currentView === 'all' ? 'All Snippets' :
-                      currentView === 'favorites' ? 'Favorites' : 'Bookmarks'}
+                    {currentView === 'all' ? 'All Snippets' : 'Favorites'}
                   </h2>
                   <p className="text-slate-500 dark:text-slate-400">
                     {filteredSnippets.length} snippets found
@@ -346,10 +323,8 @@ const CodeKeep = () => {
                       onDelete={() => handleDeleteSnippet(snippet.id)}
                       onCopy={() => copyToClipboard(snippet.code)}
                       onToggleFavorite={() => handleToggleFavorite(snippet.id)}
-                      onToggleBookmark={() => handleToggleBookmark(snippet.id)}
                       onView={() => setViewingSnippet(snippet)}
                       isFavorite={favorites.has(snippet.id)}
-                      isBookmarked={bookmarks.has(snippet.id)}
                     />
                   ))}
                 </div>

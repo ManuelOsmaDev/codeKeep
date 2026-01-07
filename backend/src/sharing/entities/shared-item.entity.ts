@@ -30,4 +30,11 @@ export class SharedItem {
 
   @CreateDateColumn()
   addedAt: Date;
+
+  @Column({ nullable: true })
+  addedById: string;
+
+  @ManyToOne(() => User, { nullable: true })
+  @JoinColumn({ name: 'addedById' })
+  addedBy: User;
 }

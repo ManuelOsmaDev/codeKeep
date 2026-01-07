@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import scrumApi from '../../services/scrumModule';
+import ConfirmModal from '../CodeKeep/modals/ConfirmModal';
 
 const ApplicationDetail = () => {
     const { appId } = useParams();
@@ -26,6 +27,14 @@ const ApplicationDetail = () => {
     const [selectedVersionId, setSelectedVersionId] = useState(null);
     const [versionForm, setVersionForm] = useState({ nombre: '', descripcion: '' });
     const [projectForm, setProjectForm] = useState({ nombre: '', descripcion: '' });
+
+    // Confirm modal state
+    const [confirmModal, setConfirmModal] = useState({
+        isOpen: false,
+        title: '',
+        message: '',
+        onConfirm: () => { }
+    });
 
     useEffect(() => {
         fetchData();
@@ -68,16 +77,22 @@ const ApplicationDetail = () => {
         }
     };
 
-    const handleVersionDelete = async (id, e) => {
+    const handleVersionDelete = (id, e) => {
         e.stopPropagation();
-        if (!confirm('Are you sure? This will delete all projects in this version.')) return;
-        try {
-            await scrumApi.deleteVersion(id);
-            toast.success('Version deleted');
-            fetchData();
-        } catch (error) {
-            toast.error('Failed to delete version');
-        }
+        setConfirmModal({
+            isOpen: true,
+            title: 'Delete Version',
+            message: 'Are you sure? This will delete all projects in this version.',
+            onConfirm: async () => {
+                try {
+                    await scrumApi.deleteVersion(id);
+                    toast.success('Version deleted');
+                    fetchData();
+                } catch (error) {
+                    toast.error('Failed to delete version');
+                }
+            }
+        });
     };
 
     // Project handlers
@@ -100,16 +115,22 @@ const ApplicationDetail = () => {
         }
     };
 
-    const handleProjectDelete = async (id, e) => {
+    const handleProjectDelete = (id, e) => {
         e.stopPropagation();
-        if (!confirm('Are you sure? This will delete all activities in this project.')) return;
-        try {
-            await scrumApi.deleteProject(id);
-            toast.success('Project deleted');
-            fetchData();
-        } catch (error) {
-            toast.error('Failed to delete project');
-        }
+        setConfirmModal({
+            isOpen: true,
+            title: 'Delete Project',
+            message: 'Are you sure? This will delete all activities in this project.',
+            onConfirm: async () => {
+                try {
+                    await scrumApi.deleteProject(id);
+                    toast.success('Project deleted');
+                    fetchData();
+                } catch (error) {
+                    toast.error('Failed to delete project');
+                }
+            }
+        });
     };
 
     if (loading) {
@@ -413,6 +434,17 @@ const ApplicationDetail = () => {
                     </div>
                 </div>
             )}
+
+            <ConfirmModal
+                isOpen={confirmModal.isOpen}
+                onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+                onConfirm={confirmModal.onConfirm}
+                title={confirmModal.title}
+                message={confirmModal.message}
+                type="danger"
+                confirmText="Eliminar"
+                cancelText="Cancelar"
+            />
         </div>
     );
 };

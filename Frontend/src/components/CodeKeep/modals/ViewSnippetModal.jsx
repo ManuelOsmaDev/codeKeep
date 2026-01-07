@@ -3,6 +3,7 @@ import { Copy, Heart, Edit2, Trash2 } from 'lucide-react';
 import { languageColors } from '../constants/languages';
 import { getLanguageIcon } from '../utils/languageIcons';
 import CodeEditor from '../ui/CodeEditor';
+import AddToRoomDropdown from '../ui/AddToRoomDropdown';
 
 const ViewSnippetModal = ({ snippet, onClose, favorites, toggleFavorite, copyToClipboard, setEditingSnippet, handleDelete, theme }) => {
     if (!snippet) return null;
@@ -36,6 +37,12 @@ const ViewSnippetModal = ({ snippet, onClose, favorites, toggleFavorite, copyToC
                         >
                             <Heart className={`w-5 h-5 ${favorites.has(snippet.id) ? 'fill-red-500 text-red-500 dark:fill-red-400 dark:text-red-400' : 'text-slate-400'}`} />
                         </button>
+                        <div className="flex items-center justify-center bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg transition-colors h-[40px] px-0.5">
+                            <AddToRoomDropdown
+                                itemType="snippet"
+                                itemId={snippet.id}
+                            />
+                        </div>
                         <button
                             onClick={onClose}
                             className="bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 p-2 rounded-lg transition-colors text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"

@@ -6,7 +6,7 @@ import CreateRoomModal from '../modals/CreateRoomModal';
 import ManageRoomModal from '../modals/ManageRoomModal';
 import ConfirmModal from '../modals/ConfirmModal';
 
-const RoomsView = () => {
+const RoomsView = ({ searchTerm }) => {
     const [rooms, setRooms] = useState([]);
     const [sharedRooms, setSharedRooms] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -207,7 +207,9 @@ const RoomsView = () => {
         );
     }
 
-    const displayRooms = activeTab === 'my-rooms' ? rooms : sharedRooms;
+    const displayRooms = (activeTab === 'my-rooms' ? rooms : sharedRooms).filter(room =>
+        !searchTerm || room.name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
 
     return (
         <div className="space-y-6">

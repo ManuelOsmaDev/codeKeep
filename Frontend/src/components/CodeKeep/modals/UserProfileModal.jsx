@@ -1,6 +1,6 @@
 import React from 'react';
 
-const UserProfileModal = ({ isOpen, onClose, user, snippetsCount, favoritesCount, bookmarksCount }) => {
+const UserProfileModal = ({ isOpen, onClose, user, snippetsCount, favoritesCount }) => {
     if (!isOpen || !user) return null;
 
     return (
@@ -36,10 +36,7 @@ const UserProfileModal = ({ isOpen, onClose, user, snippetsCount, favoritesCount
                             <span className="text-sm text-slate-500 dark:text-slate-400">Favorites</span>
                             <span className="text-lg font-bold text-red-500 dark:text-red-400">{favoritesCount}</span>
                         </div>
-                        <div className="flex items-center justify-between">
-                            <span className="text-sm text-slate-500 dark:text-slate-400">Bookmarks</span>
-                            <span className="text-lg font-bold text-blue-500 dark:text-blue-400">{bookmarksCount}</span>
-                        </div>
+
                     </div>
 
                     <div className="bg-slate-100 dark:bg-slate-700/50 rounded-lg p-4">

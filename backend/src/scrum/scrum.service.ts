@@ -109,7 +109,7 @@ export class ScrumService implements OnModuleInit {
   async getApplication(id: string, userId: string) {
     const app = await this.applicationRepository.findOne({
       where: { id, userId },
-      relations: ['versiones', 'versiones.projects'],
+      relations: ['versiones', 'versiones.projects', 'versiones.projects.activities'],
     });
     if (!app) throw new NotFoundException('Application not found');
     return app;
@@ -143,7 +143,7 @@ export class ScrumService implements OnModuleInit {
     if (!app) throw new NotFoundException('Application not found');
     return this.versionRepository.find({
       where: { applicationId },
-      relations: ['projects'],
+      relations: ['projects', 'projects.activities'],
       order: { createdAt: 'DESC' },
     });
   }

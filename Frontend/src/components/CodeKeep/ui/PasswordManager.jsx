@@ -3,8 +3,9 @@ import { toast } from 'react-hot-toast';
 import { useAuth } from '../../../context/AuthContext';
 import { passwords } from '../../../services/api';
 import { Key, Plus, Eye, EyeOff, Copy, Edit, Trash2, Lock, Unlock, Search, X, Save, ExternalLink } from 'lucide-react';
+import AddToRoomDropdown from './AddToRoomDropdown';
 
-const PasswordManager = () => {
+const PasswordManager = ({ searchTerm }) => {
     const { user } = useAuth();
     const [isUnlocked, setIsUnlocked] = useState(false);
     const [hasMasterPassword, setHasMasterPassword] = useState(false);
@@ -14,7 +15,6 @@ const PasswordManager = () => {
     const [showPasswordModal, setShowPasswordModal] = useState(false);
     const [editingPassword, setEditingPassword] = useState(null);
     const [decryptedPasswords, setDecryptedPasswords] = useState({});
-    const [searchTerm, setSearchTerm] = useState('');
     const [masterPassword, setMasterPassword] = useState('');
     const [confirmMasterPassword, setConfirmMasterPassword] = useState('');
     const [isCreatingMaster, setIsCreatingMaster] = useState(false);
@@ -404,16 +404,6 @@ const PasswordManager = () => {
                 </div>
 
                 <div className="flex items-center gap-3">
-                    <div className="relative">
-                        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                        <input
-                            type="text"
-                            placeholder="Buscar..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="pl-9 pr-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
-                    </div>
                     <button
                         onClick={() => {
                             resetPasswordForm();
@@ -461,22 +451,34 @@ const PasswordManager = () => {
                                         )}
                                     </div>
                                 </div>
-                                <button
-                                    onClick={() => handleDeletePassword(pwd.id)}
-                                    className="p-1 hover:bg-red-100 dark:hover:bg-red-900/30 rounded text-red-600 transition-colors"
-                                >
-                                    <Trash2 className="w-4 h-4" />
-                                </button>
+                                <div className="flex items-center gap-1">
+                                    <AddToRoomDropdown
+                                        itemType="password"
+                                        itemId={pwd.id}
+                                        masterPassword={masterPassword}
+                                    />
+                                </div>
                             </div>
 
                             {!isDecrypted ? (
-                                <button
-                                    onClick={() => handleDecryptPassword(pwd.id)}
-                                    className="w-full px-3 py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors flex items-center justify-center gap-2"
-                                >
-                                    <Eye className="w-4 h-4" />
-                                    Ver Contraseña
-                                </button>
+                                <div className="flex flex-col gap-2">
+                                    <button
+                                        onClick={() => handleDecryptPassword(pwd.id)}
+                                        className="w-full px-3 py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors flex items-center justify-center gap-2"
+                                    >
+                                        <Eye className="w-4 h-4" />
+                                        Ver Contraseña
+                                    </button>
+                                    <div className="flex justify-end pt-2">
+                                        <button
+                                            onClick={() => handleDeletePassword(pwd.id)}
+                                            className="p-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-lg transition-colors"
+                                            title="Eliminar"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                </div>
                             ) : (
                                 <div className="space-y-2">
                                     {decrypted.username && (
@@ -503,13 +505,23 @@ const PasswordManager = () => {
                                             <Copy className="w-4 h-4" />
                                         </button>
                                     </div>
-                                    <button
-                                        onClick={() => openEditModal(pwd)}
-                                        className="w-full px-3 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors flex items-center justify-center gap-2"
-                                    >
-                                        <Edit className="w-4 h-4" />
-                                        Editar
-                                    </button>
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={() => openEditModal(pwd)}
+                                            className="flex-1 px-3 py-2 rounded-lg transition-colors flex items-center justify-center gap-2 font-medium"
+                                            style={{ backgroundColor: '#2e3549', color: '#fff' }}
+                                        >
+                                            <Edit className="w-4 h-4" />
+                                            Editar
+                                        </button>
+                                        <button
+                                            onClick={() => handleDeletePassword(pwd.id)}
+                                            className="p-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-lg transition-colors"
+                                            title="Eliminar"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    </div>
                                 </div>
                             )}
                         </div>

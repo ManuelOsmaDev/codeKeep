@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Heart, Bookmark, Settings, User, Tag, ChevronDown, Key, Share2, Shield, LayoutGrid, Code } from 'lucide-react';
+import { Heart, Settings, User, Tag, ChevronDown, Key, Shield, LayoutGrid, Code, FolderPlus } from 'lucide-react';
 
 const Sidebar = ({
     currentView,
@@ -12,7 +12,6 @@ const Sidebar = ({
     selectedTags,
     setSelectedTags,
     favorites,
-    bookmarks,
     allTags,
     setShowUserProfile,
     setShowSettings,
@@ -73,17 +72,7 @@ const Sidebar = ({
                         )}
                     </button>
 
-                    <button
-                        onClick={() => {
-                            setCurrentView('bookmarks');
-                            setActiveTab('snippets');
-                        }}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-sm font-medium"
-                        style={currentView === 'bookmarks' ? activeStyle : inactiveStyle}
-                    >
-                        <Bookmark className={`w-5 h-5 ${bookmarks.size > 0 ? 'fill-current' : ''}`} />
-                        <span>Marcadores</span>
-                    </button>
+
                 </div>
 
                 {/* Languages Section */}
@@ -173,7 +162,7 @@ const Sidebar = ({
                         className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-sm font-medium"
                         style={activeTab === 'rooms' ? activeStyle : inactiveStyle}
                     >
-                        <Share2 className="w-5 h-5" />
+                        <FolderPlus className="w-5 h-5" />
                         <span>Salas Compartidas</span>
                     </button>
 

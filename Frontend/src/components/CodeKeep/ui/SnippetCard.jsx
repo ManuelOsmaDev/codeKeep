@@ -1,23 +1,25 @@
 import React from 'react';
 import { useAuth } from '../../../context/AuthContext';
-import { Copy, Heart, Bookmark, Edit2, Trash2 } from 'lucide-react';
+import { Copy, Heart, Edit2, Trash2 } from 'lucide-react';
 import { languageColors } from '../constants/languages';
 import { getLanguageIcon } from '../utils/languageIcons';
 import { highlightCode } from '../utils/codeHighlight';
+import AddToRoomDropdown from './AddToRoomDropdown';
 
 const SnippetCard = ({
     snippet,
     isFavorite,
-    isBookmarked,
     onToggleFavorite,
-    onToggleBookmark,
     onEdit,
     onDelete,
     onView,
     onCopy,
     canEdit: explicitCanEdit,
     canDelete: explicitCanDelete,
-    compact = false
+    compact = false,
+    addedBy = null,
+    addedAt = null,
+    showAddToRoom = true
 }) => {
     const { user } = useAuth();
     const isOwner = user && snippet.userId === user.id;
@@ -27,11 +29,11 @@ const SnippetCard = ({
 
     return (
         <div
-            className="rounded-xl overflow-hidden transition-all"
+            className="rounded-xl transition-all"
             style={{ backgroundColor: '#fff', border: '1px solid #eaebed' }}
         >
             <div
-                className={`flex items-start justify-between ${compact ? 'p-3 pb-2' : 'p-4 pb-3'}`}
+                className={`flex items-start justify-between rounded-t-xl ${compact ? 'p-3 pb-2' : 'p-4 pb-3'}`}
                 style={{ borderBottom: '1px solid #eaebed' }}
             >
                 <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -63,17 +65,12 @@ const SnippetCard = ({
                     >
                         <Heart className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} />
                     </button>
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onToggleBookmark(e);
-                        }}
-                        className="transition-colors p-1.5 rounded-lg hover:bg-gray-100"
-                        style={{ color: isBookmarked ? '#3b82f6' : '#808099' }}
-                        title="Agregar a marcadores"
-                    >
-                        <Bookmark className={`w-4 h-4 ${isBookmarked ? 'fill-current' : ''}`} />
-                    </button>
+                    {showAddToRoom && (
+                        <AddToRoomDropdown
+                            itemType="snippet"
+                            itemId={snippet.id}
+                        />
+                    )}
                 </div>
             </div>
 
@@ -93,7 +90,7 @@ const SnippetCard = ({
             </div>
 
             {/* Card Footer */}
-            <div className="p-4 pt-3">
+            <div className={`p-4 pt-3 ${!addedBy ? 'rounded-b-xl' : ''}`}>
                 <div className={`flex flex-wrap gap-2 ${compact ? 'mb-2' : 'mb-3'} min-h-[28px]`}>
                     {snippet.tags && snippet.tags.slice(0, compact ? 2 : 3).map(tag => (
                         <span
@@ -119,7 +116,7 @@ const SnippetCard = ({
                         <button
                             onClick={() => onEdit()}
                             className={`${compact ? 'text-xs' : 'flex-1 text-sm'} flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg transition-colors font-medium`}
-                            style={compact ? { color: '#ffcd00' } : { backgroundColor: '#ffcd00', color: '#2e3549' }}
+                            style={compact ? { color: '#2e3549' } : { backgroundColor: '#2e3549', color: '#fff' }}
                         >
                             <Edit2 className="w-4 h-4" />
                             Editar
@@ -137,6 +134,17 @@ const SnippetCard = ({
                     )}
                 </div>
             </div>
+            {addedBy && (
+                <div className="px-4 py-2 border-t border-slate-50 flex items-center justify-between text-[10px] text-slate-400 bg-slate-50/50 rounded-b-xl">
+                    <div className="flex items-center gap-1.5 truncate">
+                        <span className="font-medium">Agregado por:</span>
+                        <span className="truncate text-indigo-500 font-semibold">{addedBy.name || addedBy.email}</span>
+                    </div>
+                    {addedAt && (
+                        <span className="flex-shrink-0 text-slate-400">{new Date(addedAt).toLocaleDateString()}</span>
+                    )}
+                </div>
+            )}
         </div>
     );
 };

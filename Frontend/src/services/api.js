@@ -70,12 +70,7 @@ export const favorites = {
     remove: (snippetId) => api.delete(`/favorites/${snippetId}`),
 };
 
-// Bookmarks endpoints
-export const bookmarks = {
-    getAll: () => api.get('/bookmarks'),
-    add: (snippetId) => api.post(`/bookmarks/${snippetId}`),
-    remove: (snippetId) => api.delete(`/bookmarks/${snippetId}`),
-};
+
 
 // Google Drive endpoints
 export const drive = {
